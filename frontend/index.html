@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ErgoPilot Prototype</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <h1>ErgoPilot</h1>
+        <p>Real-time ergonomic feedback (prototype)</p>
+      </header>
+
+      <section class="content">
+        <div class="camera-shell">
+          <video class="input-video" playsinline></video>
+          <canvas class="output-canvas"></canvas>
+          <div id="status-pill" class="status-pill safe">SAFE</div>
+        </div>
+
+        <aside class="panel">
+          <div class="controls">
+            <button id="start-btn">Start Camera</button>
+            <button id="calibrate-btn">Calibrate Neutral Posture</button>
+          </div>
+
+          <div class="metrics">
+            <div class="metric"><span>RULA</span><strong id="rula">-</strong></div>
+            <div class="metric"><span>REBA</span><strong id="reba">-</strong></div>
+            <div class="metric"><span>RWL (kg)</span><strong id="rwl">-</strong></div>
+            <div class="metric"><span>NIOSH Ratio</span><strong id="niosh">-</strong></div>
+          </div>
+
+          <div class="field">
+            <label for="worker-id">Worker ID</label>
+            <input id="worker-id" value="worker-001" />
+          </div>
+
+          <div class="field">
+            <label for="load-kg">Load (kg)</label>
+            <input id="load-kg" type="number" value="10" min="0" max="200" />
+          </div>
+
+          <div class="field">
+            <label for="freq">Lifts/min</label>
+            <input id="freq" type="number" value="2" min="0" max="20" />
+          </div>
+
+          <div class="field">
+            <label for="max-clips">Max Clips Kept (Last N)</label>
+            <input id="max-clips" type="number" value="10" min="1" max="100" />
+          </div>
+
+          <p id="notes" class="notes">Waiting for pose landmarks...</p>
+
+          <section class="clips">
+            <div class="clips-head">
+              <h2>Recent Risk Clips</h2>
+              <button id="refresh-clips-btn">Refresh</button>
+            </div>
+            <div id="clips-list" class="clips-list">
+              <p class="clip-empty">No clips recorded yet.</p>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
