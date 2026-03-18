@@ -1,0 +1,23 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache/bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Local runtime/storage artifacts
+backend/ergopilot.db
+*.sqlite3
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
