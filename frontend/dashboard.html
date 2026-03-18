@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ErgoPilot – Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <main class="dashboard-shell">
+      <header class="dashboard-header">
+        <div class="dashboard-title-block">
+          <h1>Welcome, [NAME]</h1>
+          <p id="dashboard-period-label">Posture insights for the past 7 days.</p>
+        </div>
+        <div class="dashboard-period">
+          <label for="time-range-select">Time range</label>
+          <select id="time-range-select">
+            <option value="7">Past 7 days</option>
+            <option value="30">Past 30 days</option>
+            <option value="90">Past 90 days</option>
+          </select>
+          <a href="./index.html" class="dashboard-start-btn">Start New Recording Session</a>
+        </div>
+      </header>
+
+      <section class="dashboard-metrics">
+        <article class="metric-card" id="rula-card">
+          <h2>Average RULA Score</h2>
+          <div class="metric-card-value" id="rula-average">3.46</div>
+          <p>
+            Placeholder description for what this score means and how to interpret
+            it for overall posture quality.
+          </p>
+        </article>
+        <article class="metric-card" id="reba-card">
+          <h2>Average REBA Score</h2>
+          <div class="metric-card-value" id="reba-average">6.28</div>
+          <p>
+            Placeholder description for what this score means and whether posture
+            may require closer review or adjustment.
+          </p>
+        </article>
+      </section>
+
+      <section class="dashboard-main-grid">
+        <article class="dashboard-section">
+          <h2>Areas for Improvement</h2>
+          <p>
+            Use this space to summarize common posture issues detected across
+            sessions, such as frequent forward flexion or twisting during lifts.
+          </p>
+          <p>
+            In a future version, this section can be powered by an LLM that
+            reviews clips and generates a short, worker-friendly summary of what to
+            focus on.
+          </p>
+        </article>
+
+        <aside class="dashboard-section">
+          <h2>Recent Risk Clips</h2>
+          <p>
+            A scrollable gallery of video clips where posture was flagged as
+            higher risk will appear here.
+          </p>
+          <div class="dashboard-clips-placeholder">
+            &lt;Scrollable videos here – connect to recorded risk clips from the
+            recording page.&gt;
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        const select = document.getElementById("time-range-select");
+        const label = document.getElementById("dashboard-period-label");
+        const rula = document.getElementById("rula-average");
+        const reba = document.getElementById("reba-average");
+
+        const presets = {
+          "7": { label: "past 7 days", rula: "3.46", reba: "6.28" },
+          "30": { label: "past 30 days", rula: "3.62", reba: "6.01" },
+          "90": { label: "past 90 days", rula: "3.80", reba: "5.74" }
+        };
+
+        function updateForRange(value) {
+          const preset = presets[value] || presets["7"];
+          label.textContent = `Posture insights for the ${preset.label}.`;
+          rula.textContent = preset.rula;
+          reba.textContent = preset.reba;
+        }
+
+        select.addEventListener("change", () => {
+          updateForRange(select.value);
+        });
+
+        updateForRange(select.value);
+      })();
+    </script>
+  </body>
+</html>
+

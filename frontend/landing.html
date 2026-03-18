@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en" id="top">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ErgoPilot – Posture Protection</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="landing-body">
+    <header class="landing-nav">
+      <div class="landing-nav-left">
+        <a href="#top" class="landing-logo">ErgoPilot</a>
+        <nav class="landing-nav-links">
+          <a href="#benefits">Benefits</a>
+          <a href="#how-to">How-to</a>
+          <a href="#contact">Contact Us</a>
+        </nav>
+      </div>
+      <a href="./dashboard.html" class="landing-signin-btn">Sign In</a>
+    </header>
+
+    <main class="landing-main">
+      <section class="landing-hero">
+        <p class="landing-tagline">posture protection.</p>
+      </section>
+
+      <section id="benefits" class="landing-section">
+        <header class="landing-section-header">
+          <h2>Benefits</h2>
+          <p>
+            Give workers real-time ergonomic feedback so small posture fixes today
+            prevent injuries tomorrow.
+          </p>
+        </header>
+        <div class="landing-card-grid">
+          <article class="landing-card">
+            <h3>Reduce injury risk</h3>
+            <p>
+              Surface high‑risk lifting patterns before they become recordable
+              incidents, using camera only—no wearables required.
+            </p>
+          </article>
+          <article class="landing-card">
+            <h3>Coach at the moment</h3>
+            <p>
+              Turn every lift into a coaching opportunity with simple, actionable
+              cues instead of dense ergonomics reports.
+            </p>
+          </article>
+          <article class="landing-card">
+            <h3>Track improvements</h3>
+            <p>
+              See posture scores trend over time so safety managers can measure the
+              impact of training and process changes.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="how-to" class="landing-section landing-section-alt">
+        <header class="landing-section-header">
+          <h2>How it works</h2>
+          <p>
+            ErgoPilot uses computer vision to estimate worker posture and translate
+            it into familiar ergonomics scores.
+          </p>
+        </header>
+        <ol class="landing-steps">
+          <li>
+            <strong>Set up a camera.</strong>
+            Point a standard webcam at the workstation—no depth sensors or wearables.
+          </li>
+          <li>
+            <strong>Calibrate neutral posture.</strong>
+            Capture a baseline stance for each worker to personalize feedback.
+          </li>
+          <li>
+            <strong>Record tasks.</strong>
+            Start a session and let ErgoPilot flag lifts that exceed safe thresholds.
+          </li>
+          <li>
+            <strong>Review clips.</strong>
+            Safety leads and workers review high‑risk clips together and agree on
+            specific improvements.
+          </li>
+        </ol>
+      </section>
+
+      <section id="contact" class="landing-section">
+        <header class="landing-section-header">
+          <h2>Contact us</h2>
+          <p>Interested in trying ErgoPilot with your team? Leave your info.</p>
+        </header>
+        <form class="landing-contact-form">
+          <div class="landing-field">
+            <label for="contact-name">Name</label>
+            <input id="contact-name" type="text" placeholder="Jane Doe" />
+          </div>
+          <div class="landing-field">
+            <label for="contact-email">Work email</label>
+            <input id="contact-email" type="email" placeholder="you@company.com" />
+          </div>
+          <div class="landing-field">
+            <label for="contact-message">What problems are you trying to solve?</label>
+            <textarea
+              id="contact-message"
+              rows="4"
+              placeholder="Briefly describe your use case or environment."
+            ></textarea>
+          </div>
+          <button type="submit" class="landing-primary-btn">Get in touch</button>
+        </form>
+      </section>
+    </main>
+
+    <footer class="landing-footer">
+      <p>© <span id="landing-year"></span> ErgoPilot. All rights reserved.</p>
+    </footer>
+
+    <script>
+      // Set current year in footer
+      document.getElementById("landing-year").textContent = new Date().getFullYear();
+    </script>
+  </body>
+</html>
+
