@@ -6,6 +6,8 @@ const CLIP_COOLDOWN_MS = 15000;
 const videoEl = document.querySelector(".input-video");
 const canvasEl = document.querySelector(".output-canvas");
 const canvasCtx = canvasEl.getContext("2d");
+const privacyCanvas = document.createElement("canvas");
+const privacyCtx = privacyCanvas.getContext("2d");
 
 const startBtn = document.getElementById("start-btn");
 const calibrateBtn = document.getElementById("calibrate-btn");
@@ -137,6 +139,36 @@ function setRiskUi(level) {
   statusPill.textContent = level.toUpperCase();
 }
 
+function getPoseBoundsPx(poseLandmarks, width, height) {
+  if (!poseLandmarks || !poseLandmarks.length) return null;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+
+  for (const lm of poseLandmarks) {
+    if (!Number.isFinite(lm.x) || !Number.isFinite(lm.y)) continue;
+    const x = Math.max(0, Math.min(width, lm.x * width));
+    const y = Math.max(0, Math.min(height, lm.y * height));
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+
+  if (maxX <= minX || maxY <= minY) return null;
+
+  const padX = (maxX - minX) * 0.35;
+  const padY = (maxY - minY) * 0.25;
+
+  return {
+    x: Math.max(0, minX - padX),
+    y: Math.max(0, minY - padY),
+    w: Math.min(width, maxX + padX) - Math.max(0, minX - padX),
+    h: Math.min(height, maxY + padY) - Math.max(0, minY - padY)
+  };
+}
+
 function toPayloadLandmarks(mpLandmarks) {
   return mpLandmarks.map((lm, idx) => ({
     id: idx,
@@ -189,8 +221,8 @@ async function callCalibrate() {
 }
 
 async function captureRiskClip(analysis) {
-  if (!videoEl.srcObject) {
-    notesEl.textContent = "Clip capture skipped: camera stream not ready.";
+  if (!privacyCanvas.width || !privacyCanvas.height) {
+    notesEl.textContent = "Clip capture skipped: anonymized stream not ready.";
     return;
   }
   if (clipInProgress) return;
@@ -205,7 +237,8 @@ async function captureRiskClip(analysis) {
   lastClipAt = now;
 
   try {
-    const stream = videoEl.srcObject;
+    // Privacy-first clip capture records scene context with worker body masked.
+    const stream = privacyCanvas.captureStream(20);
     let recorder = null;
     if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
       recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8" });
@@ -254,11 +287,37 @@ function drawPose(results) {
   const height = videoEl.videoHeight || 720;
   canvasEl.width = width;
   canvasEl.height = height;
+  privacyCanvas.width = width;
+  privacyCanvas.height = height;
   canvasCtx.save();
   canvasCtx.clearRect(0, 0, width, height);
   canvasCtx.drawImage(results.image, 0, 0, width, height);
+  privacyCtx.save();
+  privacyCtx.clearRect(0, 0, width, height);
+  privacyCtx.drawImage(results.image, 0, 0, width, height);
 
   if (results.poseLandmarks) {
+    const bounds = getPoseBoundsPx(results.poseLandmarks, width, height);
+    if (bounds) {
+      // Blur and darken only the worker region; keep environment context unchanged.
+      privacyCtx.save();
+      privacyCtx.filter = "blur(18px)";
+      privacyCtx.drawImage(
+        privacyCanvas,
+        bounds.x,
+        bounds.y,
+        bounds.w,
+        bounds.h,
+        bounds.x,
+        bounds.y,
+        bounds.w,
+        bounds.h
+      );
+      privacyCtx.restore();
+      privacyCtx.fillStyle = "rgba(2, 6, 23, 0.55)";
+      privacyCtx.fillRect(bounds.x, bounds.y, bounds.w, bounds.h);
+    }
+
     drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
       color: "#60a5fa",
       lineWidth: 3
@@ -268,7 +327,17 @@ function drawPose(results) {
       lineWidth: 1,
       radius: 3
     });
+    drawConnectors(privacyCtx, results.poseLandmarks, POSE_CONNECTIONS, {
+      color: "#93c5fd",
+      lineWidth: 4
+    });
+    drawLandmarks(privacyCtx, results.poseLandmarks, {
+      color: "#22c55e",
+      lineWidth: 1,
+      radius: 4
+    });
   }
+  privacyCtx.restore();
   canvasCtx.restore();
 }
 

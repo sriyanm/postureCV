@@ -11,7 +11,7 @@ Prototype implementation for a privacy-first ergonomic feedback system.
 
 - Raw video frames are processed live in browser only.
 - Persisted records contain only skeletal landmarks and derived risk scores.
-- Risk clips can be stored locally in browser IndexedDB (`risk_clips`) with a last-N retention limit.
+- Risk clips are stored as anonymized context videos in browser IndexedDB (`risk_clips`): the worker region is blurred/masked, surrounding scene remains visible, and the skeleton wireframe is overlaid.
 - No cloud storage is required for this prototype.
 
 ## Backend setup
