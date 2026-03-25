@@ -25,6 +25,7 @@
         <div class="dashboard-title-block">
           <h1 id="dashboard-welcome">Welcome</h1>
           <p id="dashboard-period-label">Posture insights for the past 7 days.</p>
+          <p id="dashboard-sample-count">Based on 0 analyzed samples.</p>
         </div>
         <div class="dashboard-header-actions">
           <div class="dashboard-period">
@@ -41,19 +42,23 @@
 
       <section class="dashboard-metrics">
         <article class="metric-card" id="rula-card">
-          <h2>Average RULA Score</h2>
-          <div class="metric-card-value" id="rula-average">3.46</div>
+          <h2>Average RULA (Full Session)</h2>
+          <div class="metric-card-value" id="rula-average">-</div>
           <p>
-            Placeholder description for what this score means and how to interpret
-            it for overall posture quality.
+            RULA (Rapid Upper Limb Assessment) ranges from 1 to 7, where lower is
+            better. A sustained average near 1-3 is generally acceptable, while
+            4+ indicates posture changes should be reviewed. This average includes
+            all analyzed samples in the selected range.
           </p>
         </article>
         <article class="metric-card" id="reba-card">
-          <h2>Average REBA Score</h2>
-          <div class="metric-card-value" id="reba-average">6.28</div>
+          <h2>Average REBA (Full Session)</h2>
+          <div class="metric-card-value" id="reba-average">-</div>
           <p>
-            Placeholder description for what this score means and whether posture
-            may require closer review or adjustment.
+            REBA (Rapid Entire Body Assessment) ranges from 1 to 15, where lower
+            is better. Scores around 1-3 suggest low risk, while higher averages
+            indicate increasing urgency for ergonomic intervention. This average
+            includes all analyzed samples in the selected range.
           </p>
         </article>
       </section>
@@ -62,25 +67,32 @@
         <article class="dashboard-section">
           <h2>Areas for Improvement</h2>
           <p>
-            Use this space to summarize common posture issues detected across
-            sessions, such as frequent forward flexion or twisting during lifts.
+            Review repeated patterns in flagged clips, such as trunk lean, knee
+            instability, or neck flexion during lifting. These recurring patterns
+            are the highest-value targets for coaching.
           </p>
           <p>
-            In a future version, this section can be powered by an LLM that
-            reviews clips and generates a short, worker-friendly summary of what to
-            focus on.
+            Pair each pattern with one corrective action (stance width, load
+            positioning, pacing, or lift technique) and track whether RULA/REBA
+            trends improve over the next week.
           </p>
         </article>
 
         <aside class="dashboard-section">
-          <h2>Recent Risk Clips</h2>
+          <div class="clips-head">
+            <h2>Recent Risk Clips</h2>
+            <div class="clip-toolbar">
+              <button type="button" id="dashboard-clear-all-btn">Clear All Data</button>
+            </div>
+          </div>
           <p>
-            A scrollable gallery of video clips where posture was flagged as
-            higher risk will appear here.
+            This gallery contains warning/danger clips saved from recording
+            sessions. Deleting a clip here also removes its linked backend risk
+            event, while the averages above are computed from all analyzed
+            session samples.
           </p>
-          <div class="dashboard-clips-placeholder">
-            &lt;Scrollable videos here – connect to recorded risk clips from the
-            recording page.&gt;
+          <div id="dashboard-clips-list" class="dashboard-clips-list">
+            <p class="clip-empty">No clips recorded yet.</p>
           </div>
         </aside>
       </section>
@@ -98,6 +110,7 @@
         var welcomeEl = document.getElementById("dashboard-welcome");
         var signOutBtn = document.getElementById("dashboard-sign-out");
         var base = auth.getApiBaseUrl();
+        var DB_VERSION = 3;
 
         function loadProfile() {
           return fetch(base + "/api/auth/me", {
@@ -135,27 +148,366 @@
 
         var select = document.getElementById("time-range-select");
         var label = document.getElementById("dashboard-period-label");
+        var sampleCountEl = document.getElementById("dashboard-sample-count");
         var rula = document.getElementById("rula-average");
         var reba = document.getElementById("reba-average");
+        var clipsListEl = document.getElementById("dashboard-clips-list");
+        var clearAllBtn = document.getElementById("dashboard-clear-all-btn");
+        var activeDays = Number(select.value) || 7;
 
-        var presets = {
-          "7": { label: "past 7 days", rula: "3.46", reba: "6.28" },
-          "30": { label: "past 30 days", rula: "3.62", reba: "6.01" },
-          "90": { label: "past 90 days", rula: "3.80", reba: "5.74" }
-        };
+        function updatePeriodLabel(days) {
+          label.textContent = "Posture insights for the past " + String(days) + " days.";
+        }
+
+        function clipItemHtml(clip) {
+          var createdAt = clip.createdAt ? new Date(clip.createdAt).toLocaleString() : "Unknown time";
+          var url = URL.createObjectURL(clip.videoBlob);
+          var rulaScore = Number.isFinite(Number(clip.rulaScore)) ? clip.rulaScore : "-";
+          var rebaScore = Number.isFinite(Number(clip.rebaScore)) ? clip.rebaScore : "-";
+          var risk = clip.riskLevel ? String(clip.riskLevel).toUpperCase() : "RISK";
+          var eventIdAttr = Number.isFinite(Number(clip.eventId)) ? String(clip.eventId) : "";
+          var sampleIdAttr = Number.isFinite(Number(clip.postureSampleId))
+            ? String(clip.postureSampleId)
+            : "";
+          var workerIdAttr = clip.workerId ? String(clip.workerId) : "";
+          var startMsAttr = Number.isFinite(Number(clip.clipStartMs)) ? String(clip.clipStartMs) : "";
+          var endMsAttr = Number.isFinite(Number(clip.clipEndMs)) ? String(clip.clipEndMs) : "";
+          return (
+            '<article class="clip-item">' +
+            '<div class="clip-meta">' +
+            createdAt +
+            " | " +
+            risk +
+            " | RULA " +
+            rulaScore +
+            " | REBA " +
+            rebaScore +
+            "</div>" +
+            '<video controls preload="metadata" src="' +
+            url +
+            '"></video>' +
+            '<div class="clip-actions">' +
+            '<a href="' +
+            url +
+            '" download="risk-clip-' +
+            String(clip.id || "local") +
+            '.webm">Download</a>' +
+            '<button class="clip-delete-btn" type="button" data-clip-id="' +
+            String(clip.id || "") +
+            '" data-event-id="' +
+            eventIdAttr +
+            '" data-sample-id="' +
+            sampleIdAttr +
+            '" data-worker-id="' +
+            workerIdAttr +
+            '" data-start-ms="' +
+            startMsAttr +
+            '" data-end-ms="' +
+            endMsAttr +
+            '">Delete</button>' +
+            "</div>" +
+            "</article>"
+          );
+        }
+
+        function openDashboardDb(version) {
+          return new Promise(function (resolve, reject) {
+            var request =
+              typeof version === "number"
+                ? indexedDB.open("ergopilot-db", version)
+                : indexedDB.open("ergopilot-db");
+            request.onupgradeneeded = function () {
+              var db = request.result;
+              if (!db.objectStoreNames.contains("risk_clips")) {
+                db.createObjectStore("risk_clips", { keyPath: "id", autoIncrement: true });
+              }
+            };
+            request.onerror = function () {
+              reject(request.error);
+            };
+            request.onsuccess = function () {
+              resolve(request.result);
+            };
+          });
+        }
+
+        function isVersionTooLow(error) {
+          if (!error) return false;
+          var msg = String(error.message || "").toLowerCase();
+          return error.name === "VersionError" || msg.indexOf("less than the existing version") !== -1;
+        }
+
+        function ensureDashboardClipStore() {
+          return openDashboardDb(DB_VERSION)
+            .catch(function (error) {
+              if (!isVersionTooLow(error)) throw error;
+              return openDashboardDb();
+            })
+            .then(function (db) {
+              if (db.objectStoreNames.contains("risk_clips")) {
+                return db;
+              }
+              var nextVersion = db.version + 1;
+              db.close();
+              return openDashboardDb(nextVersion).then(function (upgradedDb) {
+                if (!upgradedDb.objectStoreNames.contains("risk_clips")) {
+                  throw new Error("IndexedDB migration failed: risk_clips missing.");
+                }
+                return upgradedDb;
+              });
+            });
+        }
+
+        function deleteLocalClipById(clipId) {
+          return ensureDashboardClipStore().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var tx = db.transaction("risk_clips", "readwrite");
+              tx.objectStore("risk_clips").delete(clipId);
+              tx.onerror = function () {
+                reject(tx.error || new Error("Could not delete local clip."));
+              };
+              tx.oncomplete = function () {
+                resolve();
+              };
+            });
+          });
+        }
+
+        function clearLocalClips() {
+          return ensureDashboardClipStore().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var tx = db.transaction("risk_clips", "readwrite");
+              tx.objectStore("risk_clips").clear();
+              tx.onerror = function () {
+                reject(tx.error || new Error("Could not clear local clips."));
+              };
+              tx.oncomplete = function () {
+                resolve();
+              };
+            });
+          });
+        }
+
+        function loadDashboardClips() {
+          return ensureDashboardClipStore().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var tx = db.transaction("risk_clips", "readonly");
+              var req = tx.objectStore("risk_clips").getAll();
+              req.onerror = function () {
+                reject(req.error);
+              };
+              req.onsuccess = function () {
+                var clips = req.result || [];
+                clips.sort(function (a, b) {
+                  return new Date(b.createdAt) - new Date(a.createdAt);
+                });
+                resolve(clips);
+              };
+            });
+          });
+        }
+
+        function fetchSessionAverages(days) {
+          return fetch(base + "/api/session-averages?days=" + String(days), {
+            headers: Object.assign({ Accept: "application/json" }, auth.authHeaders())
+          }).then(function (res) {
+            if (res.status === 401) {
+              auth.clearSession();
+              auth.redirectToSignIn("dashboard.html");
+              return null;
+            }
+            if (!res.ok) {
+              throw new Error("Could not load session averages.");
+            }
+            return res.json();
+          });
+        }
+
+        function deleteBackendEvent(eventId) {
+          if (!Number.isFinite(eventId)) {
+            return Promise.resolve();
+          }
+          return fetch(base + "/api/events/" + String(eventId), {
+            method: "DELETE",
+            headers: auth.authHeaders()
+          }).then(function (res) {
+            if (res.status === 401) {
+              auth.clearSession();
+              auth.redirectToSignIn("dashboard.html");
+              return;
+            }
+            if (!res.ok) {
+              throw new Error("Could not delete backend event.");
+            }
+            return res.json();
+          });
+        }
+
+        function deleteBackendSample(sampleId) {
+          if (!Number.isFinite(sampleId)) {
+            return Promise.resolve();
+          }
+          return fetch(base + "/api/session-samples/" + String(sampleId), {
+            method: "DELETE",
+            headers: auth.authHeaders()
+          }).then(function (res) {
+            if (res.status === 401) {
+              auth.clearSession();
+              auth.redirectToSignIn("dashboard.html");
+              return;
+            }
+            if (!res.ok) {
+              throw new Error("Could not delete session sample.");
+            }
+            return res.json();
+          });
+        }
+
+        function deleteBackendSampleWindow(workerId, startMs, endMs) {
+          if (!workerId || !Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+            return Promise.resolve();
+          }
+          var qs = new URLSearchParams({
+            worker_id: String(workerId),
+            start_ms: String(startMs),
+            end_ms: String(endMs)
+          });
+          return fetch(base + "/api/session-samples-window?" + qs.toString(), {
+            method: "DELETE",
+            headers: auth.authHeaders()
+          }).then(function (res) {
+            if (res.status === 401) {
+              auth.clearSession();
+              auth.redirectToSignIn("dashboard.html");
+              return;
+            }
+            if (!res.ok) {
+              throw new Error("Could not delete session sample window.");
+            }
+            return res.json();
+          });
+        }
+
+        function clearBackendEvents() {
+          return fetch(base + "/api/events", {
+            method: "DELETE",
+            headers: auth.authHeaders()
+          }).then(function (res) {
+            if (res.status === 401) {
+              auth.clearSession();
+              auth.redirectToSignIn("dashboard.html");
+              return;
+            }
+            if (!res.ok) {
+              throw new Error("Could not clear backend events.");
+            }
+            return res.json();
+          });
+        }
 
         function updateForRange(value) {
-          var preset = presets[value] || presets["7"];
-          label.textContent = "Posture insights for the " + preset.label + ".";
-          rula.textContent = preset.rula;
-          reba.textContent = preset.reba;
+          var days = Number(value);
+          if (!Number.isFinite(days) || days <= 0) {
+            days = 7;
+          }
+          activeDays = days;
+          updatePeriodLabel(days);
+          fetchSessionAverages(days)
+            .then(function (data) {
+              if (!data) return;
+              var hasRula = data.rula_avg !== null && data.rula_avg !== undefined;
+              var hasReba = data.reba_avg !== null && data.reba_avg !== undefined;
+              var rulaAvg = hasRula ? Number(data.rula_avg) : NaN;
+              var rebaAvg = hasReba ? Number(data.reba_avg) : NaN;
+              var sampleCount = Number(data.sample_count);
+              rula.textContent = Number.isFinite(rulaAvg) ? rulaAvg.toFixed(2) : "-";
+              reba.textContent = Number.isFinite(rebaAvg) ? rebaAvg.toFixed(2) : "-";
+              sampleCountEl.textContent =
+                "Based on " +
+                (Number.isFinite(sampleCount) ? String(sampleCount) : "0") +
+                " analyzed samples.";
+            })
+            .catch(function () {
+              rula.textContent = "-";
+              reba.textContent = "-";
+              sampleCountEl.textContent = "Based on 0 analyzed samples.";
+            });
+        }
+
+        function renderClips() {
+          loadDashboardClips()
+            .then(function (clips) {
+              if (!clips.length) {
+                clipsListEl.innerHTML = '<p class="clip-empty">No clips recorded yet.</p>';
+                return;
+              }
+              clipsListEl.innerHTML = clips.slice(0, 10).map(clipItemHtml).join("");
+            })
+            .catch(function () {
+              clipsListEl.innerHTML = '<p class="clip-empty">Could not load local clips.</p>';
+            });
         }
 
         select.addEventListener("change", function () {
           updateForRange(select.value);
         });
 
+        clipsListEl.addEventListener("click", function (event) {
+          var target = event.target;
+          if (!(target instanceof HTMLElement)) return;
+          if (!target.classList.contains("clip-delete-btn")) return;
+
+          var clipId = Number(target.getAttribute("data-clip-id"));
+          var eventIdRaw = target.getAttribute("data-event-id");
+          var eventId = eventIdRaw ? Number(eventIdRaw) : NaN;
+          var sampleIdRaw = target.getAttribute("data-sample-id");
+          var sampleId = sampleIdRaw ? Number(sampleIdRaw) : NaN;
+          var workerId = target.getAttribute("data-worker-id") || "";
+          var startMsRaw = target.getAttribute("data-start-ms");
+          var endMsRaw = target.getAttribute("data-end-ms");
+          var startMs = startMsRaw ? Number(startMsRaw) : NaN;
+          var endMs = endMsRaw ? Number(endMsRaw) : NaN;
+          if (!Number.isFinite(clipId)) return;
+          if (!window.confirm("Delete this clip and remove its linked backend data from averages?")) return;
+
+          deleteLocalClipById(clipId)
+            .then(function () {
+              return deleteBackendEvent(eventId);
+            })
+            .then(function () {
+              return deleteBackendSampleWindow(workerId, startMs, endMs);
+            })
+            .then(function () {
+              return deleteBackendSample(sampleId);
+            })
+            .then(function () {
+              renderClips();
+              updateForRange(String(activeDays));
+            })
+            .catch(function () {
+              window.alert("Could not delete clip/event. Try again.");
+            });
+        });
+
+        clearAllBtn.addEventListener("click", function () {
+          if (!window.confirm("Clear all local clips and all backend events? This cannot be undone.")) {
+            return;
+          }
+          clearLocalClips()
+            .then(function () {
+              return clearBackendEvents();
+            })
+            .then(function () {
+              renderClips();
+              updateForRange(String(activeDays));
+            })
+            .catch(function () {
+              window.alert("Could not clear data. Try again.");
+            });
+        });
+
         updateForRange(select.value);
+        renderClips();
       })();
     </script>
   </body>

@@ -26,13 +26,32 @@
         <div class="camera-shell">
           <video class="input-video" playsinline></video>
           <canvas class="output-canvas"></canvas>
-          <div id="status-pill" class="status-pill safe">SAFE</div>
+          <div id="status-pill" class="status-pill safe status-pill--hidden">SAFE</div>
         </div>
 
         <aside class="panel">
+          <section class="recording-guide" aria-labelledby="recording-guide-title">
+            <div class="recording-guide-head">
+              <h2 id="recording-guide-title">Before you start</h2>
+              <span
+                class="help-icon"
+                tabindex="0"
+                role="img"
+                aria-label="Setup guidance"
+                title="For stable scoring: keep your whole body in frame, set baseline once, then start your task."
+                >?</span
+              >
+            </div>
+            <ol class="recording-guide-list">
+              <li>Start camera and center your full body in frame (head to ankles).</li>
+              <li>Stand naturally and click <strong>Set Baseline Posture</strong> once.</li>
+              <li>Begin task movement; keep your full body visible for reliable scores.</li>
+            </ol>
+          </section>
+
           <div class="controls">
             <button id="start-btn">Start Camera</button>
-            <button id="calibrate-btn">Calibrate Neutral Posture</button>
+            <button id="calibrate-btn">Set Baseline Posture</button>
           </div>
 
           <div class="metrics">
@@ -42,23 +61,44 @@
             <div class="metric"><span>NIOSH Ratio</span><strong id="niosh">-</strong></div>
           </div>
 
-          <div class="field">
-            <label for="worker-id">Worker ID</label>
-            <input id="worker-id" value="worker-001" />
-          </div>
+          <details class="advanced-inputs">
+            <summary>
+              Advanced Inputs (Optional)
+              <span
+                class="help-icon help-icon--inline"
+                tabindex="0"
+                role="img"
+                aria-label="Advanced inputs help"
+                title="If you skip this section, defaults are used: Load 10 kg and Lifts/min 2."
+                >?</span
+              >
+            </summary>
+            <p class="advanced-inputs-note">
+              Optional NIOSH proxy inputs. Leave default values for a quick start.
+            </p>
+            <div class="field">
+              <label for="load-kg">Load (kg)</label>
+              <input id="load-kg" type="number" value="10" min="0" max="200" />
+            </div>
+
+            <div class="field">
+              <label for="freq">Lifts/min</label>
+              <input id="freq" type="number" value="2" min="0" max="20" />
+            </div>
+          </details>
 
           <div class="field">
-            <label for="load-kg">Load (kg)</label>
-            <input id="load-kg" type="number" value="10" min="0" max="200" />
-          </div>
-
-          <div class="field">
-            <label for="freq">Lifts/min</label>
-            <input id="freq" type="number" value="2" min="0" max="20" />
-          </div>
-
-          <div class="field">
-            <label for="max-clips">Max Clips Kept (Last N)</label>
+            <label for="max-clips"
+              >Max Clips Kept (Last N)
+              <span
+                class="help-icon help-icon--inline"
+                tabindex="0"
+                role="img"
+                aria-label="Clip retention help"
+                title="Only the most recent N clips are kept in local browser storage."
+                >?</span
+              ></label
+            >
             <input id="max-clips" type="number" value="10" min="1" max="100" />
           </div>
 
@@ -67,7 +107,10 @@
           <section class="clips">
             <div class="clips-head">
               <h2>Recent Risk Clips</h2>
-              <button id="refresh-clips-btn">Refresh</button>
+              <div class="clip-toolbar">
+                <button id="refresh-clips-btn">Refresh</button>
+                <button id="clear-all-data-btn" type="button">Clear All Data</button>
+              </div>
             </div>
             <div id="clips-list" class="clips-list">
               <p class="clip-empty">No clips recorded yet.</p>

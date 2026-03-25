@@ -1,7 +1,9 @@
-const API_BASE_URL = "http://localhost:8000";
-const DB_VERSION = 2;
+const auth = window.ErgoPilotAuth;
+const API_BASE_URL = auth ? auth.getApiBaseUrl() : "http://localhost:8000";
+const DB_VERSION = 3;
 const CLIP_DURATION_MS = 5000;
 const CLIP_COOLDOWN_MS = 15000;
+const DEFAULT_WORKER_ID = "worker-self";
 
 const videoEl = document.querySelector(".input-video");
 const canvasEl = document.querySelector(".output-canvas");
@@ -12,9 +14,9 @@ const privacyCtx = privacyCanvas.getContext("2d");
 const startBtn = document.getElementById("start-btn");
 const calibrateBtn = document.getElementById("calibrate-btn");
 const refreshClipsBtn = document.getElementById("refresh-clips-btn");
+const clearAllDataBtn = document.getElementById("clear-all-data-btn");
 const notesEl = document.getElementById("notes");
 const statusPill = document.getElementById("status-pill");
-const workerIdEl = document.getElementById("worker-id");
 const loadKgEl = document.getElementById("load-kg");
 const freqEl = document.getElementById("freq");
 const maxClipsEl = document.getElementById("max-clips");
@@ -29,8 +31,27 @@ let latestLandmarks = null;
 let lastAnalyzeAt = 0;
 let idb = null;
 let camera = null;
+let pose = null;
+let isCameraRunning = false;
+let captureSessionToken = 0;
 let clipInProgress = false;
 let lastClipAt = 0;
+
+function getJsonHeaders() {
+  if (!auth) {
+    return { "Content-Type": "application/json" };
+  }
+  return Object.assign({ "Content-Type": "application/json" }, auth.authHeaders());
+}
+
+function handleAuthFailure(statusCode) {
+  if (statusCode !== 401 || !auth) {
+    return false;
+  }
+  auth.clearSession();
+  auth.redirectToSignIn("index.html");
+  return true;
+}
 
 function getMaxClips() {
   const value = Number(maxClipsEl.value || 10);
@@ -38,9 +59,12 @@ function getMaxClips() {
   return Math.max(1, Math.min(100, Math.floor(value)));
 }
 
-function initIndexedDb() {
+function openErgoDb(version) {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ergopilot-db", DB_VERSION);
+    const request =
+      typeof version === "number"
+        ? indexedDB.open("ergopilot-db", version)
+        : indexedDB.open("ergopilot-db");
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains("risk_events")) {
@@ -56,6 +80,50 @@ function initIndexedDb() {
   });
 }
 
+function isIndexedDbVersionTooLow(error) {
+  if (!error) return false;
+  const msg = String(error.message || "").toLowerCase();
+  return error.name === "VersionError" || msg.includes("less than the existing version");
+}
+
+async function openPreferredDb() {
+  try {
+    return await openErgoDb(DB_VERSION);
+  } catch (error) {
+    if (!isIndexedDbVersionTooLow(error)) {
+      throw error;
+    }
+    return openErgoDb();
+  }
+}
+
+async function ensureStoresReady() {
+  if (!idb) {
+    idb = await openPreferredDb();
+  }
+  const hasRiskClips = idb.objectStoreNames.contains("risk_clips");
+  const hasRiskEvents = idb.objectStoreNames.contains("risk_events");
+  if (hasRiskClips && hasRiskEvents) {
+    return;
+  }
+  const nextVersion = idb.version + 1;
+  try {
+    idb.close();
+  } catch (_) {
+    /* no-op */
+  }
+  idb = await openErgoDb(nextVersion);
+  if (!idb.objectStoreNames.contains("risk_clips") || !idb.objectStoreNames.contains("risk_events")) {
+    throw new Error("IndexedDB migration failed: required stores missing.");
+  }
+}
+
+async function initIndexedDb() {
+  idb = await openPreferredDb();
+  await ensureStoresReady();
+  return idb;
+}
+
 function txPromise(tx) {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
@@ -65,13 +133,13 @@ function txPromise(tx) {
 }
 
 function addRiskEvent(event) {
-  if (!idb) return;
+  if (!idb || !idb.objectStoreNames.contains("risk_events")) return;
   const tx = idb.transaction("risk_events", "readwrite");
   tx.objectStore("risk_events").add({ ...event, createdAt: new Date().toISOString() });
 }
 
 async function addRiskClip(clip) {
-  if (!idb) return;
+  await ensureStoresReady();
   const tx = idb.transaction("risk_clips", "readwrite");
   tx.objectStore("risk_clips").add({
     ...clip,
@@ -81,7 +149,7 @@ async function addRiskClip(clip) {
 }
 
 async function getAllRiskClips() {
-  if (!idb) return [];
+  await ensureStoresReady();
   return new Promise((resolve, reject) => {
     const tx = idb.transaction("risk_clips", "readonly");
     const req = tx.objectStore("risk_clips").getAll();
@@ -91,10 +159,73 @@ async function getAllRiskClips() {
 }
 
 async function deleteRiskClipById(id) {
-  if (!idb) return;
+  await ensureStoresReady();
   const tx = idb.transaction("risk_clips", "readwrite");
   tx.objectStore("risk_clips").delete(id);
   await txPromise(tx);
+}
+
+async function clearAllRiskClips() {
+  await ensureStoresReady();
+  const tx = idb.transaction("risk_clips", "readwrite");
+  tx.objectStore("risk_clips").clear();
+  await txPromise(tx);
+}
+
+async function deleteBackendEventById(eventId) {
+  if (!Number.isFinite(eventId)) return true;
+  const res = await fetch(`${API_BASE_URL}/api/events/${eventId}`, {
+    method: "DELETE",
+    headers: auth ? auth.authHeaders() : {}
+  });
+  if (handleAuthFailure(res.status)) return false;
+  if (!res.ok) {
+    throw new Error(`Delete event failed: ${res.status}`);
+  }
+  return true;
+}
+
+async function deleteBackendSampleById(sampleId) {
+  if (!Number.isFinite(sampleId)) return true;
+  const res = await fetch(`${API_BASE_URL}/api/session-samples/${sampleId}`, {
+    method: "DELETE",
+    headers: auth ? auth.authHeaders() : {}
+  });
+  if (handleAuthFailure(res.status)) return false;
+  if (!res.ok) {
+    throw new Error(`Delete sample failed: ${res.status}`);
+  }
+  return true;
+}
+
+async function deleteBackendSamplesWindow(workerId, startMs, endMs) {
+  if (!workerId || !Number.isFinite(startMs) || !Number.isFinite(endMs)) return true;
+  const params = new URLSearchParams({
+    worker_id: String(workerId),
+    start_ms: String(startMs),
+    end_ms: String(endMs)
+  });
+  const res = await fetch(`${API_BASE_URL}/api/session-samples-window?${params.toString()}`, {
+    method: "DELETE",
+    headers: auth ? auth.authHeaders() : {}
+  });
+  if (handleAuthFailure(res.status)) return false;
+  if (!res.ok) {
+    throw new Error(`Delete sample window failed: ${res.status}`);
+  }
+  return true;
+}
+
+async function clearBackendEvents() {
+  const res = await fetch(`${API_BASE_URL}/api/events`, {
+    method: "DELETE",
+    headers: auth ? auth.authHeaders() : {}
+  });
+  if (handleAuthFailure(res.status)) return false;
+  if (!res.ok) {
+    throw new Error(`Clear events failed: ${res.status}`);
+  }
+  return true;
 }
 
 async function enforceClipRetention() {
@@ -125,6 +256,9 @@ async function renderClipsList() {
           <video controls preload="metadata" src="${url}"></video>
           <div class="clip-actions">
             <a href="${url}" download="risk-clip-${clip.id}.webm">Download</a>
+            <button class="clip-delete-btn" type="button" data-clip-id="${clip.id}" data-event-id="${clip.eventId ?? ""}" data-sample-id="${clip.postureSampleId ?? ""}" data-worker-id="${clip.workerId ?? ""}" data-start-ms="${clip.clipStartMs ?? ""}" data-end-ms="${clip.clipEndMs ?? ""}">
+              Delete
+            </button>
           </div>
         </article>
       `;
@@ -134,6 +268,7 @@ async function renderClipsList() {
 }
 
 function setRiskUi(level) {
+  statusPill.classList.remove("status-pill--hidden");
   statusPill.classList.remove("safe", "warning", "danger");
   statusPill.classList.add(level);
   statusPill.textContent = level.toUpperCase();
@@ -180,9 +315,8 @@ function toPayloadLandmarks(mpLandmarks) {
 }
 
 async function callAnalyze(landmarksPayload) {
-  const workerId = workerIdEl.value.trim() || "worker-001";
   const body = {
-    worker_id: workerId,
+    worker_id: DEFAULT_WORKER_ID,
     landmarks: landmarksPayload,
     load_kg: Number(loadKgEl.value || 0),
     frequency_lifts_per_min: Number(freqEl.value || 0),
@@ -190,9 +324,12 @@ async function callAnalyze(landmarksPayload) {
   };
   const res = await fetch(`${API_BASE_URL}/api/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getJsonHeaders(),
     body: JSON.stringify(body)
   });
+  if (handleAuthFailure(res.status)) {
+    throw new Error("Session expired.");
+  }
   if (!res.ok) {
     throw new Error(`Analyze failed: ${res.status}`);
   }
@@ -205,22 +342,30 @@ async function callCalibrate() {
     return;
   }
   const payload = {
-    worker_id: workerIdEl.value.trim() || "worker-001",
+    worker_id: DEFAULT_WORKER_ID,
     landmarks: toPayloadLandmarks(latestLandmarks)
   };
   const res = await fetch(`${API_BASE_URL}/api/calibrate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getJsonHeaders(),
     body: JSON.stringify(payload)
   });
+  if (handleAuthFailure(res.status)) {
+    return;
+  }
   if (!res.ok) {
     notesEl.textContent = "Calibration request failed.";
     return;
   }
-  notesEl.textContent = "Calibration saved. Hold this as neutral posture baseline.";
+  notesEl.textContent = "Baseline posture saved. Start recording task movement.";
 }
 
 async function captureRiskClip(analysis) {
+  const eventId = Number(analysis.risk_event_id);
+  if (!Number.isFinite(eventId)) {
+    notesEl.textContent = "Clip skipped: backend event link missing.";
+    return;
+  }
   if (!privacyCanvas.width || !privacyCanvas.height) {
     notesEl.textContent = "Clip capture skipped: anonymized stream not ready.";
     return;
@@ -232,6 +377,7 @@ async function captureRiskClip(analysis) {
   }
   const now = Date.now();
   if (now - lastClipAt < CLIP_COOLDOWN_MS) return;
+  const clipStartMs = Date.now();
 
   clipInProgress = true;
   lastClipAt = now;
@@ -270,6 +416,12 @@ async function captureRiskClip(analysis) {
       rulaScore: analysis.rula_score,
       rebaScore: analysis.reba_score,
       nioshRatio: analysis.niosh_ratio,
+      eventId: eventId,
+      postureSampleId: Number.isFinite(Number(analysis.posture_sample_id))
+        ? Number(analysis.posture_sample_id)
+        : null,
+      clipStartMs: clipStartMs,
+      clipEndMs: Date.now(),
       videoBlob: blob
     });
     await enforceClipRetention();
@@ -342,6 +494,7 @@ function drawPose(results) {
 }
 
 async function onResults(results) {
+  if (!isCameraRunning) return;
   drawPose(results);
   if (!results.poseLandmarks) return;
 
@@ -372,7 +525,10 @@ async function onResults(results) {
         nioshRatio: analysis.niosh_ratio,
         landmarks: landmarksPayload
       });
-      captureRiskClip(analysis);
+      const linkedEventId = Number(analysis.risk_event_id);
+      if (Number.isFinite(linkedEventId)) {
+        captureRiskClip(analysis);
+      }
     }
   } catch (error) {
     notesEl.textContent = `Backend unavailable: ${error.message}`;
@@ -380,30 +536,73 @@ async function onResults(results) {
 }
 
 async function startCameraAndPose() {
-  const pose = new Pose({
+  const localPose = new Pose({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
   });
 
-  pose.setOptions({
+  localPose.setOptions({
     modelComplexity: 1,
     smoothLandmarks: true,
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5
   });
-  pose.onResults(onResults);
+  localPose.onResults(onResults);
+  const sessionToken = ++captureSessionToken;
 
   camera = new Camera(videoEl, {
     onFrame: async () => {
-      await pose.send({ image: videoEl });
+      if (!isCameraRunning || sessionToken !== captureSessionToken) return;
+      await localPose.send({ image: videoEl });
     },
     width: 1280,
     height: 720
   });
+  pose = localPose;
   await camera.start();
-  notesEl.textContent = "Camera running. Stand in frame and press calibrate.";
+  isCameraRunning = true;
+  startBtn.textContent = "Stop Camera";
+  setRiskUi("safe");
+  notesEl.textContent = "Camera running. Keep full body in frame, then click Set Baseline Posture.";
+}
+
+async function stopCameraAndPose() {
+  isCameraRunning = false;
+  captureSessionToken += 1;
+  if (camera && typeof camera.stop === "function") {
+    await camera.stop();
+  }
+  if (pose && typeof pose.close === "function") {
+    await pose.close();
+  }
+  if (videoEl && typeof videoEl.pause === "function") {
+    videoEl.pause();
+    videoEl.removeAttribute("src");
+    videoEl.srcObject = null;
+  }
+  const width = canvasEl.width || videoEl.videoWidth || 1280;
+  const height = canvasEl.height || videoEl.videoHeight || 720;
+  canvasCtx.clearRect(0, 0, width, height);
+  privacyCtx.clearRect(0, 0, width, height);
+  canvasEl.width = 0;
+  canvasEl.height = 0;
+  privacyCanvas.width = 0;
+  privacyCanvas.height = 0;
+  camera = null;
+  pose = null;
+  latestLandmarks = null;
+  lastAnalyzeAt = 0;
+  startBtn.textContent = "Start Camera";
+  statusPill.classList.add("status-pill--hidden");
+  notesEl.textContent = "Camera stopped.";
 }
 
 startBtn.addEventListener("click", () => {
+  if (isCameraRunning) {
+    stopCameraAndPose().catch((error) => {
+      notesEl.textContent = `Camera stop failed: ${error.message}`;
+    });
+    return;
+  }
   startCameraAndPose().catch((error) => {
     notesEl.textContent = `Camera start failed: ${error.message}`;
   });
@@ -420,6 +619,62 @@ refreshClipsBtn.addEventListener("click", () => {
     notesEl.textContent = `Clip refresh failed: ${error.message}`;
   });
 });
+
+clipsListEl.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (!target.classList.contains("clip-delete-btn")) return;
+
+  const clipId = Number(target.getAttribute("data-clip-id"));
+  const eventIdRaw = target.getAttribute("data-event-id");
+  const eventId = eventIdRaw && eventIdRaw !== "" ? Number(eventIdRaw) : NaN;
+  const sampleIdRaw = target.getAttribute("data-sample-id");
+  const sampleId = sampleIdRaw && sampleIdRaw !== "" ? Number(sampleIdRaw) : NaN;
+  const workerId = target.getAttribute("data-worker-id") || "";
+  const startMsRaw = target.getAttribute("data-start-ms");
+  const endMsRaw = target.getAttribute("data-end-ms");
+  const startMs = startMsRaw && startMsRaw !== "" ? Number(startMsRaw) : NaN;
+  const endMs = endMsRaw && endMsRaw !== "" ? Number(endMsRaw) : NaN;
+  const confirmed = window.confirm("Delete this clip and remove its linked backend data from averages?");
+  if (!confirmed) return;
+
+  Promise.resolve()
+    .then(() => deleteRiskClipById(clipId))
+    .then(() => deleteBackendEventById(eventId))
+    .then(() => deleteBackendSamplesWindow(workerId, startMs, endMs))
+    .then(() => deleteBackendSampleById(sampleId))
+    .then(() => renderClipsList())
+    .then(() => {
+      notesEl.textContent = "Clip deleted. Linked backend event removed when available.";
+    })
+    .catch((error) => {
+      notesEl.textContent = `Delete failed: ${error.message}`;
+    });
+});
+
+if (clearAllDataBtn) {
+  clearAllDataBtn.addEventListener("click", () => {
+    const confirmed = window.confirm(
+      "Clear all local clips and all backend risk events? This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    Promise.resolve()
+      .then(() => clearAllRiskClips())
+      .then(() => clearBackendEvents())
+      .then(() => renderClipsList())
+      .then(() => {
+        rulaEl.textContent = "-";
+        rebaEl.textContent = "-";
+        rwlEl.textContent = "-";
+        nioshEl.textContent = "-";
+        notesEl.textContent = "Cleared local clips and backend events.";
+      })
+      .catch((error) => {
+        notesEl.textContent = `Clear failed: ${error.message}`;
+      });
+  });
+}
 
 maxClipsEl.addEventListener("change", () => {
   enforceClipRetention()

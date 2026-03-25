@@ -52,6 +52,7 @@ body {
   grid-template-columns: 2fr 1fr;
   gap: 16px;
   margin-top: 16px;
+  align-items: start;
 }
 
 .camera-shell {
@@ -60,6 +61,7 @@ body {
   overflow: hidden;
   background: #e3f3ea;
   min-height: 540px;
+  height: 540px;
 }
 
 .input-video,
@@ -95,10 +97,87 @@ body {
   background: color-mix(in srgb, var(--danger), #111 25%);
 }
 
+.status-pill--hidden {
+  display: none;
+}
+
 .panel {
   background: var(--panel);
   border-radius: 14px;
   padding: 14px;
+}
+
+.recording-guide {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #c8e3d2;
+  background: #e6f5ee;
+}
+
+.recording-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recording-guide h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.recording-guide-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 0.85rem;
+  color: #1f2937;
+}
+
+.recording-guide-list li + li {
+  margin-top: 4px;
+}
+
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid #9ca3af;
+  color: #374151;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: help;
+  background: #ffffff;
+  line-height: 1;
+}
+
+.help-icon--inline {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.advanced-inputs {
+  margin-top: 10px;
+  border: 1px solid #c8e3d2;
+  border-radius: 10px;
+  background: #e6f5ee;
+  padding: 8px 10px;
+}
+
+.advanced-inputs summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.advanced-inputs-note {
+  margin: 8px 0 4px;
+  font-size: 0.82rem;
+  color: #4b5563;
 }
 
 .controls {
@@ -163,11 +242,12 @@ button:hover {
 
 #start-btn,
 #calibrate-btn,
-#worker-id,
 #load-kg,
 #freq,
 #max-clips,
-#refresh-clips-btn {
+#refresh-clips-btn,
+#clear-all-data-btn,
+#dashboard-clear-all-btn {
   background: var(--accent);
   color: #ffffff;
   border-color: var(--accent);
@@ -188,6 +268,12 @@ button:hover {
 .clips-head {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.clip-toolbar {
+  display: flex;
   align-items: center;
   gap: 8px;
 }
@@ -227,12 +313,24 @@ button:hover {
 .clip-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
 }
 
 .clip-actions a {
   color: #93c5fd;
   text-decoration: none;
   font-size: 0.85rem;
+}
+
+.clip-delete-btn {
+  border: 1px solid #fca5a5;
+  background: #fff1f2;
+  color: #9f1239;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .clip-empty {
@@ -246,6 +344,7 @@ button:hover {
   }
   .camera-shell {
     min-height: 460px;
+    height: 460px;
   }
 }
 
@@ -656,6 +755,14 @@ button:hover {
   border: 1px dashed var(--landing-border);
   color: var(--landing-muted);
   font-size: 0.9rem;
+}
+
+.dashboard-clips-list {
+  margin-top: 8px;
+  max-height: 420px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
 }
 
 /* Sign-in page */
