@@ -3,71 +3,79 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ErgoPilot – Sign in</title>
+    <title>ErgoPilot – Create account</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body class="landing-body">
     <header class="landing-nav">
       <div class="landing-nav-left">
         <a href="./landing.html" class="landing-logo">ErgoPilot</a>
-        <nav class="landing-nav-links">
-        </nav>
+        <nav class="landing-nav-links"></nav>
       </div>
       <div class="landing-nav-cta">
-        <a id="signin-signup-nav-link" href="./signup.html" class="landing-nav-secondary">Create account</a>
-        <span class="nav-current" aria-current="page"></span>
+        <a href="./signin.html" class="landing-nav-secondary">Sign in</a>
         <a href="./landing.html" class="landing-signin-btn landing-signin-btn--ghost">Back to home</a>
       </div>
     </header>
 
     <main class="signin-main">
-      <section class="signin-card" aria-labelledby="signin-heading">
-        <h1 id="signin-heading">Sign in</h1>
-        <p class="signin-lead">Use your work account to open your posture dashboard.</p>
+      <section class="signin-card" aria-labelledby="signup-heading">
+        <h1 id="signup-heading">Create account</h1>
+        <p class="signin-lead">Set up your ErgoPilot account to start tracking posture risk trends.</p>
 
-        <form id="signin-form" class="signin-form" novalidate>
+        <form id="signup-form" class="signin-form" novalidate>
           <div class="signin-field">
-            <label for="signin-email">Email</label>
+            <label for="signup-name">Display name</label>
             <input
-              id="signin-email"
+              id="signup-name"
+              name="display_name"
+              type="text"
+              autocomplete="name"
+              required
+              maxlength="120"
+              placeholder="Jane Doe"
+            />
+            <p id="signup-name-error" class="signin-field-error" role="alert" hidden></p>
+          </div>
+          <div class="signin-field">
+            <label for="signup-email">Email</label>
+            <input
+              id="signup-email"
               name="email"
               type="email"
-              autocomplete="username"
+              autocomplete="email"
               required
               placeholder="you@company.com"
             />
-            <p id="signin-email-error" class="signin-field-error" role="alert" hidden></p>
+            <p id="signup-email-error" class="signin-field-error" role="alert" hidden></p>
           </div>
           <div class="signin-field">
-            <label for="signin-password">Password</label>
+            <label for="signup-password">Password</label>
             <input
-              id="signin-password"
+              id="signup-password"
               name="password"
               type="password"
-              autocomplete="current-password"
+              autocomplete="new-password"
               required
               minlength="8"
               maxlength="256"
-              placeholder="••••••••"
+              placeholder="At least 8 characters"
             />
-            <p id="signin-password-error" class="signin-field-error" role="alert" hidden></p>
+            <p id="signup-password-error" class="signin-field-error" role="alert" hidden></p>
           </div>
-          <p id="signin-form-error" class="signin-banner-error" role="alert" hidden></p>
-          <button type="submit" id="signin-submit" class="signin-submit">Sign in</button>
+          <p id="signup-form-error" class="signin-banner-error" role="alert" hidden></p>
+          <button type="submit" id="signup-submit" class="signin-submit">Create account</button>
         </form>
 
-        <!-- <p class="signin-hint">
-          Demo (local): <code>demo@ergopilot.local</code> / <code>changeme</code>
-        </p> -->
         <p class="signin-hint">
-          New to ErgoPilot?
-          <a id="signin-signup-link" href="./signup.html">Create an account</a>
+          Already have an account?
+          <a id="signup-signin-link" href="./signin.html">Sign in</a>
         </p>
       </section>
     </main>
 
     <footer class="landing-footer">
-      <p>© <span id="signin-year"></span> ErgoPilot. All rights reserved.</p>
+      <p>© <span id="signup-year"></span> ErgoPilot. All rights reserved.</p>
     </footer>
 
     <script src="./auth.js"></script>
@@ -78,31 +86,43 @@
           return;
         }
 
-        document.getElementById("signin-year").textContent = new Date().getFullYear();
+        document.getElementById("signup-year").textContent = new Date().getFullYear();
 
-        var form = document.getElementById("signin-form");
-        var emailEl = document.getElementById("signin-email");
-        var passwordEl = document.getElementById("signin-password");
-        var submitBtn = document.getElementById("signin-submit");
-        var formError = document.getElementById("signin-form-error");
-        var emailError = document.getElementById("signin-email-error");
-        var passwordError = document.getElementById("signin-password-error");
+        var form = document.getElementById("signup-form");
+        var nameEl = document.getElementById("signup-name");
+        var emailEl = document.getElementById("signup-email");
+        var passwordEl = document.getElementById("signup-password");
+        var submitBtn = document.getElementById("signup-submit");
+        var formError = document.getElementById("signup-form-error");
+        var nameError = document.getElementById("signup-name-error");
+        var emailError = document.getElementById("signup-email-error");
+        var passwordError = document.getElementById("signup-password-error");
         var lockedAccountEmail = window.ErgoPilotAuth.getLockedAccountEmail();
         if (lockedAccountEmail) {
           formError.textContent =
             "This browser is locked to " +
             lockedAccountEmail +
-            ". Sign in with that account.";
+            ". Create/sign in with that account only.";
           formError.hidden = false;
+        }
+
+        var params = new URLSearchParams(window.location.search);
+        var nextRaw = params.get("next");
+        var signinLink = document.getElementById("signup-signin-link");
+        if (signinLink && nextRaw) {
+          signinLink.setAttribute("href", "./signin.html?next=" + encodeURIComponent(nextRaw));
         }
 
         function clearErrors() {
           formError.hidden = true;
           formError.textContent = "";
+          nameError.hidden = true;
+          nameError.textContent = "";
           emailError.hidden = true;
           emailError.textContent = "";
           passwordError.hidden = true;
           passwordError.textContent = "";
+          nameEl.removeAttribute("aria-invalid");
           emailEl.removeAttribute("aria-invalid");
           passwordEl.removeAttribute("aria-invalid");
         }
@@ -110,12 +130,20 @@
         function setLoading(loading) {
           submitBtn.disabled = loading;
           submitBtn.setAttribute("aria-busy", loading ? "true" : "false");
-          submitBtn.textContent = loading ? "Signing in…" : "Sign in";
+          submitBtn.textContent = loading ? "Creating account…" : "Create account";
         }
 
         function validateClient() {
           clearErrors();
           var ok = true;
+          var displayName = nameEl.value.trim();
+          if (!displayName) {
+            nameError.textContent = "Enter your display name.";
+            nameError.hidden = false;
+            nameEl.setAttribute("aria-invalid", "true");
+            ok = false;
+          }
+
           var email = emailEl.value.trim();
           if (!email) {
             emailError.textContent = "Enter your email.";
@@ -127,10 +155,18 @@
             emailError.hidden = false;
             emailEl.setAttribute("aria-invalid", "true");
             ok = false;
+          } else if (window.ErgoPilotAuth.isLockedToDifferentAccount(email)) {
+            var locked = window.ErgoPilotAuth.getLockedAccountEmail();
+            emailError.textContent =
+              "This browser is locked to " + locked + ". Use that account.";
+            emailError.hidden = false;
+            emailEl.setAttribute("aria-invalid", "true");
+            ok = false;
           }
+
           var pw = passwordEl.value;
           if (!pw) {
-            passwordError.textContent = "Enter your password.";
+            passwordError.textContent = "Create a password.";
             passwordError.hidden = false;
             passwordEl.setAttribute("aria-invalid", "true");
             ok = false;
@@ -166,25 +202,29 @@
                 var locked = window.ErgoPilotAuth.getLockedAccountEmail();
                 window.ErgoPilotAuth.clearSession();
                 throw new Error(
-                  "This browser is locked to " + locked + ". Sign in with that account."
+                  "This browser is locked to " + locked + ". Create/sign in with that account only."
                 );
               }
               window.ErgoPilotAuth.lockAccountEmail(canonicalEmail);
             });
         }
 
-        var params = new URLSearchParams(window.location.search);
-        var nextRaw = params.get("next");
-        var signupLink = document.getElementById("signin-signup-link");
-        var signupNavLink = document.getElementById("signin-signup-nav-link");
-        if (nextRaw) {
-          var signupHref = "./signup.html?next=" + encodeURIComponent(nextRaw);
-          if (signupLink) {
-            signupLink.setAttribute("href", signupHref);
+        function formatApiError(data) {
+          if (!data || data.detail == null) {
+            return "Could not create account.";
           }
-          if (signupNavLink) {
-            signupNavLink.setAttribute("href", signupHref);
+          if (typeof data.detail === "string") {
+            return data.detail;
           }
+          if (Array.isArray(data.detail) && data.detail.length) {
+            return data.detail
+              .map(function (d) {
+                return d.msg || "";
+              })
+              .filter(Boolean)
+              .join(" ");
+          }
+          return "Could not create account.";
         }
 
         form.addEventListener("submit", function (e) {
@@ -197,29 +237,12 @@
 
           var base = window.ErgoPilotAuth.getApiBaseUrl();
           var body = JSON.stringify({
+            display_name: nameEl.value.trim(),
             email: emailEl.value.trim(),
             password: passwordEl.value
           });
 
-          function formatApiError(data) {
-            if (!data || data.detail == null) {
-              return "Could not sign in.";
-            }
-            if (typeof data.detail === "string") {
-              return data.detail;
-            }
-            if (Array.isArray(data.detail) && data.detail.length) {
-              return data.detail
-                .map(function (d) {
-                  return d.msg || "";
-                })
-                .filter(Boolean)
-                .join(" ");
-            }
-            return "Could not sign in.";
-          }
-
-          fetch(base + "/api/auth/login", {
+          fetch(base + "/api/auth/signup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: body
@@ -234,7 +257,7 @@
                     data = {};
                   }
                 }
-                return { ok: res.ok, status: res.status, data: data };
+                return { ok: res.ok, data: data };
               });
             })
             .then(function (result) {
@@ -255,7 +278,10 @@
                 err && err.message
                   ? err.message
                   : "Something went wrong. Check your connection and try again.";
-              if (message === "Failed to fetch" || message === "NetworkError when attempting to fetch resource.") {
+              if (
+                message === "Failed to fetch" ||
+                message === "NetworkError when attempting to fetch resource."
+              ) {
                 message =
                   "Cannot reach the API. Start the backend (port 8000) or set window.__ERGOPILOT_API_BASE__.";
               }

@@ -3,8 +3,9 @@ const API_BASE_URL = auth ? auth.getApiBaseUrl() : "http://localhost:8000";
 const DB_VERSION = 3;
 const CLIP_DURATION_MS = 5000;
 const CLIP_COOLDOWN_MS = 15000;
-const PRESTART_COUNTDOWN_SECONDS = 5;
-const DEFAULT_WORKER_ID = "worker-self";
+const PRESTART_COUNTDOWN_SECONDS = 20;
+const PRESTART_COUNTDOWN_INCREMENT_SECONDS = 20;
+const ACTIVE_WORKER_ID = auth ? auth.getActiveWorkerId() : "worker-self";
 
 const videoEl = document.querySelector(".input-video");
 const canvasEl = document.querySelector(".output-canvas");
@@ -13,7 +14,6 @@ const privacyCanvas = document.createElement("canvas");
 const privacyCtx = privacyCanvas.getContext("2d");
 
 const startBtn = document.getElementById("start-btn");
-const calibrateBtn = document.getElementById("calibrate-btn");
 const refreshClipsBtn = document.getElementById("refresh-clips-btn");
 const clearAllDataBtn = document.getElementById("clear-all-data-btn");
 const notesEl = document.getElementById("notes");
@@ -178,6 +178,21 @@ async function clearAllRiskClips() {
   await txPromise(tx);
 }
 
+function clipsForActiveWorker(clips) {
+  return (Array.isArray(clips) ? clips : []).filter(
+    (clip) => String(clip && clip.workerId ? clip.workerId : "") === ACTIVE_WORKER_ID
+  );
+}
+
+async function clearRiskClipsForActiveWorker() {
+  const clips = clipsForActiveWorker(await getAllRiskClips());
+  for (const clip of clips) {
+    if (Number.isFinite(Number(clip.id))) {
+      await deleteRiskClipById(Number(clip.id));
+    }
+  }
+}
+
 async function deleteBackendEventById(eventId) {
   if (!Number.isFinite(eventId)) return true;
   const res = await fetch(`${API_BASE_URL}/api/events/${eventId}`, {
@@ -236,7 +251,7 @@ async function clearBackendEvents() {
 
 async function enforceClipRetention() {
   const maxClips = getMaxClips();
-  const clips = await getAllRiskClips();
+  const clips = clipsForActiveWorker(await getAllRiskClips());
   clips.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   if (clips.length <= maxClips) return;
   const toDelete = clips.slice(0, clips.length - maxClips);
@@ -246,7 +261,7 @@ async function enforceClipRetention() {
 }
 
 async function renderClipsList() {
-  const clips = await getAllRiskClips();
+  const clips = clipsForActiveWorker(await getAllRiskClips());
   clips.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   if (!clips.length) {
     clipsListEl.innerHTML = '<p class="clip-empty">No clips recorded yet.</p>';
@@ -283,10 +298,31 @@ function setRiskUi(level) {
 function hideCountdownOverlay() {
   if (countdownOverlayEl) {
     countdownOverlayEl.classList.add("status-pill--hidden");
+    countdownOverlayEl.classList.remove("countdown-overlay--interactive");
   }
   if (countdownValueEl) {
     countdownValueEl.textContent = String(PRESTART_COUNTDOWN_SECONDS);
   }
+}
+
+function updateCountdownText() {
+  notesEl.textContent =
+    "Camera live. Capturing baseline in " +
+    String(countdownRemaining) +
+    " seconds. Tap the countdown screen to add 20s.";
+}
+
+function canExtendCountdown() {
+  return isCameraRunning && !isAnalysisActive && Boolean(countdownIntervalId) && countdownRemaining > 0;
+}
+
+function extendCountdown() {
+  if (!canExtendCountdown()) return;
+  countdownRemaining += PRESTART_COUNTDOWN_INCREMENT_SECONDS;
+  if (countdownValueEl) {
+    countdownValueEl.textContent = String(countdownRemaining);
+  }
+  updateCountdownText();
 }
 
 function beginPrestartCountdown() {
@@ -296,6 +332,7 @@ function beginPrestartCountdown() {
     notesEl.textContent = "Analysis started. Move naturally and monitor feedback.";
     return;
   }
+  const sessionToken = captureSessionToken;
   if (countdownIntervalId) {
     clearInterval(countdownIntervalId);
     countdownIntervalId = null;
@@ -303,11 +340,11 @@ function beginPrestartCountdown() {
   countdownRemaining = PRESTART_COUNTDOWN_SECONDS;
   countdownValueEl.textContent = String(countdownRemaining);
   countdownOverlayEl.classList.remove("status-pill--hidden");
-  notesEl.textContent =
-    "Camera live. Starting analysis in " + String(countdownRemaining) + " seconds...";
+  countdownOverlayEl.classList.add("countdown-overlay--interactive");
+  updateCountdownText();
 
-  countdownIntervalId = setInterval(() => {
-    if (!isCameraRunning) {
+  countdownIntervalId = setInterval(async () => {
+    if (!isCameraRunning || sessionToken !== captureSessionToken) {
       clearInterval(countdownIntervalId);
       countdownIntervalId = null;
       return;
@@ -316,16 +353,30 @@ function beginPrestartCountdown() {
     if (countdownRemaining <= 0) {
       clearInterval(countdownIntervalId);
       countdownIntervalId = null;
+      countdownRemaining = 0;
       hideCountdownOverlay();
+      notesEl.textContent = "Capturing baseline posture...";
+      let didCalibrate = false;
+      try {
+        didCalibrate = await callCalibrate();
+      } catch (error) {
+        notesEl.textContent = `Baseline capture failed: ${error.message}`;
+        return;
+      }
+      if (!isCameraRunning || sessionToken !== captureSessionToken) return;
+      if (!didCalibrate) {
+        notesEl.textContent =
+          "Could not capture baseline posture. Keep your body in frame and restart camera to try again.";
+        return;
+      }
       isAnalysisActive = true;
       lastAnalyzeAt = 0;
       setRiskUi("safe");
-      notesEl.textContent = "Analysis started. Move naturally and monitor feedback.";
+      notesEl.textContent = "Baseline captured. Analysis started. Move naturally and monitor feedback.";
       return;
     }
     countdownValueEl.textContent = String(countdownRemaining);
-    notesEl.textContent =
-      "Camera live. Starting analysis in " + String(countdownRemaining) + " seconds...";
+    updateCountdownText();
   }, 1000);
 }
 
@@ -371,7 +422,7 @@ function toPayloadLandmarks(mpLandmarks) {
 
 async function callAnalyze(landmarksPayload) {
   const body = {
-    worker_id: DEFAULT_WORKER_ID,
+    worker_id: ACTIVE_WORKER_ID,
     landmarks: landmarksPayload,
     load_kg: Number(loadKgEl.value || 0),
     frequency_lifts_per_min: Number(freqEl.value || 0),
@@ -393,11 +444,10 @@ async function callAnalyze(landmarksPayload) {
 
 async function callCalibrate() {
   if (!latestLandmarks) {
-    notesEl.textContent = "No landmarks available yet. Start camera first.";
-    return;
+    return false;
   }
   const payload = {
-    worker_id: DEFAULT_WORKER_ID,
+    worker_id: ACTIVE_WORKER_ID,
     landmarks: toPayloadLandmarks(latestLandmarks)
   };
   const res = await fetch(`${API_BASE_URL}/api/calibrate`, {
@@ -406,13 +456,12 @@ async function callCalibrate() {
     body: JSON.stringify(payload)
   });
   if (handleAuthFailure(res.status)) {
-    return;
+    return false;
   }
   if (!res.ok) {
-    notesEl.textContent = "Calibration request failed.";
-    return;
+    return false;
   }
-  notesEl.textContent = "Baseline posture saved. Start recording task movement.";
+  return true;
 }
 
 async function captureRiskClip(analysis) {
@@ -433,6 +482,12 @@ async function captureRiskClip(analysis) {
   const now = Date.now();
   if (now - lastClipAt < CLIP_COOLDOWN_MS) return;
   const clipStartMs = Date.now();
+  const riskDescriptions = Array.isArray(analysis.notes)
+    ? analysis.notes
+        .map((note) => String(note || "").trim())
+        .filter((note) => note.length > 0)
+    : [];
+  const primaryRiskDescription = riskDescriptions.length > 0 ? riskDescriptions[0] : "";
 
   clipInProgress = true;
   lastClipAt = now;
@@ -471,6 +526,8 @@ async function captureRiskClip(analysis) {
       rulaScore: analysis.rula_score,
       rebaScore: analysis.reba_score,
       nioshRatio: analysis.niosh_ratio,
+      riskDescriptions: riskDescriptions,
+      primaryRiskDescription: primaryRiskDescription,
       eventId: eventId,
       postureSampleId: Number.isFinite(Number(analysis.posture_sample_id))
         ? Number(analysis.posture_sample_id)
@@ -672,11 +729,11 @@ startBtn.addEventListener("click", () => {
   });
 });
 
-calibrateBtn.addEventListener("click", () => {
-  callCalibrate().catch((error) => {
-    notesEl.textContent = `Calibration failed: ${error.message}`;
+if (countdownOverlayEl) {
+  countdownOverlayEl.addEventListener("click", () => {
+    extendCountdown();
   });
-});
+}
 
 refreshClipsBtn.addEventListener("click", () => {
   renderClipsList().catch((error) => {
@@ -701,6 +758,10 @@ clipsListEl.addEventListener("click", (event) => {
   const endMs = endMsRaw && endMsRaw !== "" ? Number(endMsRaw) : NaN;
   const confirmed = window.confirm("Delete this clip and remove its linked backend data from averages?");
   if (!confirmed) return;
+  if (workerId && workerId !== ACTIVE_WORKER_ID) {
+    notesEl.textContent = "Blocked: clip account mismatch for this browser lock.";
+    return;
+  }
 
   Promise.resolve()
     .then(() => deleteRiskClipById(clipId))
@@ -724,8 +785,20 @@ if (clearAllDataBtn) {
     if (!confirmed) return;
 
     Promise.resolve()
-      .then(() => clearAllRiskClips())
-      .then(() => clearBackendEvents())
+      .then(() => getAllRiskClips())
+      .then((clips) => clipsForActiveWorker(clips))
+      .then(async (clips) => {
+        for (const clip of clips) {
+          await deleteBackendEventById(Number(clip.eventId));
+          await deleteBackendSamplesWindow(
+            ACTIVE_WORKER_ID,
+            Number(clip.clipStartMs),
+            Number(clip.clipEndMs)
+          );
+          await deleteBackendSampleById(Number(clip.postureSampleId));
+        }
+      })
+      .then(() => clearRiskClipsForActiveWorker())
       .then(() => renderClipsList())
       .then(() => {
         rulaEl.textContent = "-";

@@ -1,22 +1,28 @@
 import jwt
 import time
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.auth import create_access_token, decode_access_token, verify_password
+from app.auth import create_access_token, decode_access_token, hash_password, verify_password
 from app.ergonomics import analyze_pose, build_calibration_profile
+from app.llm_summary import synthesize_improvement_summary
 from app.schemas import (
     AnalyzeRequest,
     CalibrationProfile,
     CalibrationRequest,
+    ImprovementSummaryRequest,
+    ImprovementSummaryResponse,
     LoginRequest,
+    SignupRequest,
     TokenResponse,
     UserPublic,
 )
 from app.storage import (
+    UserAlreadyExistsError,
     clear_posture_samples,
     clear_risk_events,
+    create_user,
     delete_posture_sample,
     delete_posture_samples_in_window,
     delete_risk_event,
@@ -27,6 +33,7 @@ from app.storage import (
     insert_posture_sample,
     insert_risk_event,
     seed_demo_user_if_empty,
+    reset_users_to_demo,
 )
 
 app = FastAPI(title="ErgoPilot Prototype API", version="0.1.0")
@@ -115,9 +122,54 @@ def login(payload: LoginRequest) -> TokenResponse:
     return TokenResponse(access_token=token)
 
 
+@app.post("/api/auth/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def signup(payload: SignupRequest) -> TokenResponse:
+    display_name = payload.display_name.strip()
+    if not display_name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Display name is required.",
+        )
+    try:
+        user = create_user(
+            email=payload.email,
+            password_hash=hash_password(payload.password),
+            display_name=display_name,
+        )
+    except UserAlreadyExistsError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
+
+    token = create_access_token(
+        subject_email=user["email"],
+        display_name=user["display_name"],
+    )
+    return TokenResponse(access_token=token)
+
+
 @app.get("/api/auth/me", response_model=UserPublic)
 def me(current: UserPublic = Depends(get_current_user)) -> UserPublic:
     return current
+
+
+@app.post("/api/admin/reset-demo-users")
+def admin_reset_demo_users(
+    _: UserPublic = Depends(get_current_user),
+    admin_reset_token: str | None = Header(default=None, alias="X-ErgoPilot-Admin-Reset"),
+) -> dict[str, object]:
+    if admin_reset_token != "demo-only":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Missing or invalid admin reset token.",
+        )
+    result = reset_users_to_demo()
+    return {
+        "status": "ok",
+        "deleted_user_count": result["deleted_user_count"],
+        "demo_email": result["demo_email"],
+    }
 
 
 @app.post("/api/calibrate")
@@ -186,6 +238,17 @@ def events(
     return {"count": limit, "items": get_recent_events(limit)}
 
 
+@app.post("/api/improvement-summary", response_model=ImprovementSummaryResponse)
+def improvement_summary(
+    payload: ImprovementSummaryRequest,
+    _: UserPublic = Depends(get_current_user),
+) -> ImprovementSummaryResponse:
+    summary, source, model = synthesize_improvement_summary(
+        [clip.model_dump() for clip in payload.clips]
+    )
+    return ImprovementSummaryResponse(summary=summary, source=source, model=model)
+
+
 @app.delete("/api/events/{event_id}")
 def delete_event(
     event_id: int,
@@ -233,11 +296,13 @@ def delete_session_samples_window(
 @app.get("/api/session-averages")
 def session_averages(
     days: int = Query(default=7, ge=1, le=365),
+    worker_id: str | None = Query(default=None, min_length=1, max_length=128),
     _: UserPublic = Depends(get_current_user),
 ) -> dict[str, object]:
-    averages = get_session_averages(days)
+    averages = get_session_averages(days, worker_id=worker_id)
     return {
         "days": days,
+        "worker_id": worker_id,
         "sample_count": averages["sample_count"],
         "rula_avg": averages["rula_avg"],
         "reba_avg": averages["reba_avg"],

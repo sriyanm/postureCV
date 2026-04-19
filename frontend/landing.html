@@ -17,6 +17,7 @@
         </nav>
       </div>
       <div class="landing-nav-cta">
+        <a id="landing-signup-link" href="./signup.html" class="landing-nav-secondary">Create account</a>
         <a id="landing-auth-link" href="./signin.html" class="landing-signin-btn">Sign in</a>
       </div>
     </header>
@@ -29,31 +30,20 @@
       <section id="benefits" class="landing-section">
         <header class="landing-section-header">
           <h2>Benefits</h2>
-          <p>
-            Give workers real-time ergonomic feedback so small posture fixes today prevent injuries tomorrow.
-          </p>
+          <p>Real-time coaching that helps prevent strain before it builds up.</p>
         </header>
         <div class="landing-card-grid">
           <article class="landing-card">
             <h3>Reduce injury risk</h3>
-            <p>
-              Surface high‑risk lifting patterns before they become recordable
-              incidents, using camera only—no wearables required.
-            </p>
+            <p>Catch high-risk lifts early with a standard camera setup.</p>
           </article>
           <article class="landing-card">
             <h3>Coach at the moment</h3>
-            <p>
-              Turn every lift into a coaching opportunity with simple, actionable
-              cues instead of dense ergonomics reports.
-            </p>
+            <p>Show clear cues workers can apply right away.</p>
           </article>
           <article class="landing-card">
             <h3>Track improvements</h3>
-            <p>
-              See posture scores trend over time so safety managers can measure the
-              impact of training and process changes.
-            </p>
+            <p>Monitor score trends to validate training impact.</p>
           </article>
         </div>
       </section>
@@ -61,29 +51,17 @@
       <section id="how-to" class="landing-section landing-section-alt">
         <header class="landing-section-header">
           <h2>How it works</h2>
-          <p>
-            ErgoPilot uses computer vision to estimate worker posture and
-            translate it into familiar ergonomics scores (RULA 1-7 and REBA
-            1-15, where lower scores generally indicate safer posture).
-          </p>
+          <p>Computer vision converts movement into practical RULA and REBA signals.</p>
         </header>
         <ol class="landing-steps">
           <li>
-            <strong>Set up a camera.</strong>
-            Point a standard webcam at the workstation—no depth sensors or wearables.
+            <strong>Set up a camera.</strong> Position a webcam at the workstation.
           </li>
           <li>
-            <strong>Calibrate neutral posture.</strong>
-            Capture a baseline stance for each worker to personalize feedback.
+            <strong>Auto-capture neutral posture.</strong> A short startup countdown captures baseline before analysis.
           </li>
           <li>
-            <strong>Record tasks.</strong>
-            Start a session and let ErgoPilot flag lifts that exceed safe thresholds.
-          </li>
-          <li>
-            <strong>Review clips.</strong>
-            Safety leads and workers review high‑risk clips together and agree on
-            specific improvements.
+            <strong>Review flagged clips.</strong> Focus coaching on repeat risk patterns.
           </li>
         </ol>
       </section>
@@ -91,7 +69,7 @@
       <section id="contact" class="landing-section">
         <header class="landing-section-header">
           <h2>Contact us</h2>
-          <p>Interested in trying ErgoPilot with your team? Leave your info.</p>
+          <p>Questions or feedback? We'd love to hear from you.</p>
         </header>
         <form class="landing-contact-form">
           <div class="landing-field">
@@ -99,11 +77,11 @@
             <input id="contact-name" type="text" placeholder="Jane Doe" />
           </div>
           <div class="landing-field">
-            <label for="contact-email">Work email</label>
+            <label for="contact-email">Email</label>
             <input id="contact-email" type="email" placeholder="you@company.com" />
           </div>
           <div class="landing-field">
-            <label for="contact-message">What problems are you trying to solve?</label>
+            <label for="contact-message">Message</label>
             <textarea
               id="contact-message"
               rows="4"
@@ -128,10 +106,14 @@
       (function () {
         var auth = window.ErgoPilotAuth;
         var cta = document.getElementById("landing-auth-link");
+        var signup = document.getElementById("landing-signup-link");
         if (!auth || !cta) return;
         if (auth.getAccessToken()) {
           cta.textContent = "Dashboard";
           cta.setAttribute("href", "./dashboard.html");
+          if (signup) {
+            signup.hidden = true;
+          }
         }
       })();
     </script>

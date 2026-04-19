@@ -6,6 +6,10 @@ from typing import Any
 DB_PATH = Path(__file__).resolve().parent.parent / "ergopilot.db"
 
 
+class UserAlreadyExistsError(ValueError):
+    pass
+
+
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -91,6 +95,61 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
             (normalized,),
         ).fetchone()
     return dict(row) if row else None
+
+
+def create_user(email: str, password_hash: str, display_name: str) -> dict[str, Any]:
+    normalized_email = email.strip().lower()
+    normalized_name = display_name.strip()
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO users (email, password_hash, display_name)
+                VALUES (?, ?, ?);
+                """,
+                (normalized_email, password_hash, normalized_name),
+            )
+            row_id = cursor.lastrowid
+            if row_id is None:
+                raise RuntimeError("Failed to create user.")
+            row = conn.execute(
+                "SELECT id, email, display_name FROM users WHERE id = ? LIMIT 1;",
+                (row_id,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("Created user could not be loaded.")
+            return dict(row)
+    except sqlite3.IntegrityError as exc:
+        raise UserAlreadyExistsError("An account with this email already exists.") from exc
+
+
+def reset_users_to_demo() -> dict[str, Any]:
+    from app.auth import hash_password
+
+    demo_email = "demo@ergopilot.local"
+    demo_password = "changeme"
+    demo_display_name = "Demo Worker"
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM users WHERE lower(email) != ?;",
+            (demo_email,),
+        )
+        deleted_user_count = int(cursor.rowcount)
+        conn.execute(
+            """
+            INSERT INTO users (email, password_hash, display_name)
+            VALUES (?, ?, ?)
+            ON CONFLICT(email)
+            DO UPDATE SET
+                password_hash = excluded.password_hash,
+                display_name = excluded.display_name;
+            """,
+            (demo_email, hash_password(demo_password), demo_display_name),
+        )
+    return {
+        "deleted_user_count": deleted_user_count,
+        "demo_email": demo_email,
+    }
 
 
 def insert_risk_event(
@@ -215,20 +274,35 @@ def delete_posture_samples_in_window(worker_id: str, start_ms: float, end_ms: fl
         return int(cursor.rowcount)
 
 
-def get_session_averages(days: int) -> dict[str, Any]:
+def get_session_averages(days: int, worker_id: str | None = None) -> dict[str, Any]:
     interval = f"-{days} days"
+    normalized_worker_id = (worker_id or "").strip()
     with get_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT
-                COUNT(*) AS sample_count,
-                AVG(rula_score) AS rula_avg,
-                AVG(reba_score) AS reba_avg
-            FROM posture_samples
-            WHERE created_at >= datetime('now', ?);
-            """,
-            (interval,),
-        ).fetchone()
+        if normalized_worker_id:
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS sample_count,
+                    AVG(rula_score) AS rula_avg,
+                    AVG(reba_score) AS reba_avg
+                FROM posture_samples
+                WHERE created_at >= datetime('now', ?)
+                  AND worker_id = ?;
+                """,
+                (interval, normalized_worker_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS sample_count,
+                    AVG(rula_score) AS rula_avg,
+                    AVG(reba_score) AS reba_avg
+                FROM posture_samples
+                WHERE created_at >= datetime('now', ?);
+                """,
+                (interval,),
+            ).fetchone()
     if row is None:
         return {"sample_count": 0, "rula_avg": None, "reba_avg": None}
     return {

@@ -24,8 +24,7 @@
       <header class="dashboard-header">
         <div class="dashboard-title-block">
           <h1 id="dashboard-welcome">Welcome</h1>
-          <p id="dashboard-period-label">Posture insights for the past 7 days.</p>
-          <p id="dashboard-sample-count">Based on 0 analyzed samples.</p>
+          <p id="dashboard-period-label">Past 7 days overview.</p>
         </div>
         <div class="dashboard-header-actions">
           <div class="dashboard-period">
@@ -35,46 +34,29 @@
               <option value="30">Past 30 days</option>
               <option value="90">Past 90 days</option>
             </select>
-            <a href="./index.html" class="dashboard-start-btn">Start New Recording Session</a>
+            <a href="./index.html" class="dashboard-start-btn">Start Recording</a>
           </div>
         </div>
       </header>
 
       <section class="dashboard-metrics">
         <article class="metric-card" id="rula-card">
-          <h2>Average RULA (Full Session)</h2>
+          <h2>Avg RULA</h2>
           <div class="metric-card-value" id="rula-average">-</div>
-          <p>
-            RULA (Rapid Upper Limb Assessment) ranges from 1 to 7, where lower is
-            better. A sustained average near 1-3 is generally acceptable, while
-            4+ indicates posture changes should be reviewed. This average includes
-            all analyzed samples in the selected range.
-          </p>
+          <p>Scale 1-7. Lower is better.</p>
         </article>
         <article class="metric-card" id="reba-card">
-          <h2>Average REBA (Full Session)</h2>
+          <h2>Avg REBA</h2>
           <div class="metric-card-value" id="reba-average">-</div>
-          <p>
-            REBA (Rapid Entire Body Assessment) ranges from 1 to 15, where lower
-            is better. Scores around 1-3 suggest low risk, while higher averages
-            indicate increasing urgency for ergonomic intervention. This average
-            includes all analyzed samples in the selected range.
-          </p>
+          <p>Scale 1-15. Higher scores indicate higher risk.</p>
         </article>
       </section>
 
       <section class="dashboard-main-grid">
         <article class="dashboard-section">
           <h2>Areas for Improvement</h2>
-          <p>
-            Review repeated patterns in flagged clips, such as trunk lean, knee
-            instability, or neck flexion during lifting. These recurring patterns
-            are the highest-value targets for coaching.
-          </p>
-          <p>
-            Pair each pattern with one corrective action (stance width, load
-            positioning, pacing, or lift technique) and track whether RULA/REBA
-            trends improve over the next week.
+          <p id="dashboard-improvement-summary">
+            No risk clips yet. Record a session to generate targeted improvement suggestions.
           </p>
         </article>
 
@@ -85,12 +67,8 @@
               <button type="button" id="dashboard-clear-all-btn">Clear All Data</button>
             </div>
           </div>
-          <p>
-            This gallery contains warning/danger clips saved from recording
-            sessions. Deleting a clip here also removes its linked backend risk
-            event, while the averages above are computed from all analyzed
-            session samples.
-          </p>
+          <p>Saved risk clips from recent sessions.</p>
+          <p>Deleting a clip permanently removes all of its associated data from the system.</p>
           <div id="dashboard-clips-list" class="dashboard-clips-list">
             <p class="clip-empty">No clips recorded yet.</p>
           </div>
@@ -110,6 +88,7 @@
         var welcomeEl = document.getElementById("dashboard-welcome");
         var signOutBtn = document.getElementById("dashboard-sign-out");
         var base = auth.getApiBaseUrl();
+        var activeWorkerId = auth.getActiveWorkerId();
         var DB_VERSION = 3;
 
         function loadProfile() {
@@ -126,6 +105,21 @@
               return null;
             }
             return res.json();
+          }).then(function (user) {
+            var canonicalEmail = user && user.email ? String(user.email).trim().toLowerCase() : "";
+            if (!canonicalEmail) {
+              return user;
+            }
+            if (auth.isLockedToDifferentAccount(canonicalEmail)) {
+              var locked = auth.getLockedAccountEmail();
+              auth.clearSession();
+              window.alert("This browser is locked to " + locked + ". Sign in with that account.");
+              auth.redirectToSignIn("dashboard.html");
+              return null;
+            }
+            auth.lockAccountEmail(canonicalEmail);
+            activeWorkerId = auth.getActiveWorkerId();
+            return user;
           });
         }
 
@@ -148,15 +142,16 @@
 
         var select = document.getElementById("time-range-select");
         var label = document.getElementById("dashboard-period-label");
-        var sampleCountEl = document.getElementById("dashboard-sample-count");
         var rula = document.getElementById("rula-average");
         var reba = document.getElementById("reba-average");
+        var improvementSummaryEl = document.getElementById("dashboard-improvement-summary");
         var clipsListEl = document.getElementById("dashboard-clips-list");
         var clearAllBtn = document.getElementById("dashboard-clear-all-btn");
         var activeDays = Number(select.value) || 7;
+        var summaryRequestToken = 0;
 
         function updatePeriodLabel(days) {
-          label.textContent = "Posture insights for the past " + String(days) + " days.";
+          label.textContent = "Past " + String(days) + " days overview.";
         }
 
         function clipItemHtml(clip) {
@@ -208,6 +203,144 @@
             "</div>" +
             "</article>"
           );
+        }
+
+        function normalizeDescriptionKey(text) {
+          return String(text || "")
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, " ");
+        }
+
+        function getClipDescriptions(clip) {
+          if (Array.isArray(clip.riskDescriptions) && clip.riskDescriptions.length) {
+            return clip.riskDescriptions
+              .map(function (item) {
+                return String(item || "").trim();
+              })
+              .filter(function (item) {
+                return item.length > 0;
+              });
+          }
+          if (clip.primaryRiskDescription) {
+            return [String(clip.primaryRiskDescription).trim()];
+          }
+          return [];
+        }
+
+        function summarizeImprovementPatterns(clips) {
+          if (!Array.isArray(clips) || clips.length === 0) {
+            return "No risk clips yet. Record a session to generate targeted improvement suggestions.";
+          }
+
+          var counts = Object.create(null);
+          clips.forEach(function (clip) {
+            var descriptions = getClipDescriptions(clip);
+            var seenForClip = Object.create(null);
+            descriptions.forEach(function (description) {
+              var key = normalizeDescriptionKey(description);
+              if (!key || seenForClip[key]) return;
+              seenForClip[key] = true;
+              if (!counts[key]) {
+                counts[key] = { label: description, count: 0 };
+              }
+              counts[key].count += 1;
+            });
+          });
+
+          var ranked = Object.keys(counts)
+            .map(function (key) {
+              return counts[key];
+            })
+            .sort(function (a, b) {
+              if (b.count !== a.count) return b.count - a.count;
+              return a.label.localeCompare(b.label);
+            });
+
+          if (!ranked.length) {
+            return "Risk clips exist, but detailed posture descriptions are missing in older data. Record new clips to generate pattern-based guidance.";
+          }
+
+          var top = ranked.slice(0, 3);
+          var frequent = top
+            .map(function (item) {
+              return item.label + " (" + String(item.count) + ")";
+            })
+            .join("; ");
+          return (
+            "From " +
+            String(clips.length) +
+            " risk clips, most frequent triggers are: " +
+            frequent +
+            ". Start with the highest-frequency pattern first."
+          );
+        }
+
+        function buildImprovementSummaryPayload(clips) {
+          return {
+            clips: (Array.isArray(clips) ? clips : []).slice(0, 150).map(function (clip) {
+              var descriptions = getClipDescriptions(clip).slice(0, 8);
+              return {
+                risk_level: clip.riskLevel ? String(clip.riskLevel).toLowerCase() : null,
+                risk_descriptions: descriptions,
+                primary_risk_description:
+                  descriptions.length > 0
+                    ? descriptions[0]
+                    : clip.primaryRiskDescription
+                      ? String(clip.primaryRiskDescription).trim()
+                      : null,
+                rula_score: Number.isFinite(Number(clip.rulaScore)) ? Number(clip.rulaScore) : null,
+                reba_score: Number.isFinite(Number(clip.rebaScore)) ? Number(clip.rebaScore) : null,
+                niosh_ratio: Number.isFinite(Number(clip.nioshRatio)) ? Number(clip.nioshRatio) : null
+              };
+            })
+          };
+        }
+
+        function fetchImprovementSummary(clips) {
+          return fetch(base + "/api/improvement-summary", {
+            method: "POST",
+            headers: Object.assign(
+              {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+              },
+              auth.authHeaders()
+            ),
+            body: JSON.stringify(buildImprovementSummaryPayload(clips))
+          }).then(function (res) {
+            if (res.status === 401) {
+              auth.clearSession();
+              auth.redirectToSignIn("dashboard.html");
+              return null;
+            }
+            if (!res.ok) {
+              throw new Error("Could not synthesize improvement summary.");
+            }
+            return res.json();
+          });
+        }
+
+        function updateImprovementSummary(clips) {
+          if (!improvementSummaryEl) return;
+          var fallbackSummary = summarizeImprovementPatterns(clips);
+          if (!Array.isArray(clips) || clips.length === 0) {
+            improvementSummaryEl.textContent = fallbackSummary;
+            return;
+          }
+
+          var requestToken = ++summaryRequestToken;
+          improvementSummaryEl.textContent = "Synthesizing suggestions...";
+          fetchImprovementSummary(clips)
+            .then(function (data) {
+              if (requestToken !== summaryRequestToken || !improvementSummaryEl) return;
+              var summary = data && typeof data.summary === "string" ? data.summary.trim() : "";
+              improvementSummaryEl.textContent = summary || fallbackSummary;
+            })
+            .catch(function () {
+              if (requestToken !== summaryRequestToken || !improvementSummaryEl) return;
+              improvementSummaryEl.textContent = fallbackSummary;
+            });
         }
 
         function openDashboardDb(version) {
@@ -277,7 +410,19 @@
           return ensureDashboardClipStore().then(function (db) {
             return new Promise(function (resolve, reject) {
               var tx = db.transaction("risk_clips", "readwrite");
-              tx.objectStore("risk_clips").clear();
+              var store = tx.objectStore("risk_clips");
+              var req = store.getAll();
+              req.onerror = function () {
+                reject(req.error || new Error("Could not load local clips."));
+              };
+              req.onsuccess = function () {
+                var clips = req.result || [];
+                clips.forEach(function (clip) {
+                  if (String(clip && clip.workerId ? clip.workerId : "") === activeWorkerId) {
+                    store.delete(clip.id);
+                  }
+                });
+              };
               tx.onerror = function () {
                 reject(tx.error || new Error("Could not clear local clips."));
               };
@@ -298,6 +443,9 @@
               };
               req.onsuccess = function () {
                 var clips = req.result || [];
+                clips = clips.filter(function (clip) {
+                  return String(clip && clip.workerId ? clip.workerId : "") === activeWorkerId;
+                });
                 clips.sort(function (a, b) {
                   return new Date(b.createdAt) - new Date(a.createdAt);
                 });
@@ -308,7 +456,11 @@
         }
 
         function fetchSessionAverages(days) {
-          return fetch(base + "/api/session-averages?days=" + String(days), {
+          var params = new URLSearchParams({
+            days: String(days),
+            worker_id: String(activeWorkerId)
+          });
+          return fetch(base + "/api/session-averages?" + params.toString(), {
             headers: Object.assign({ Accept: "application/json" }, auth.authHeaders())
           }).then(function (res) {
             if (res.status === 401) {
@@ -419,24 +571,19 @@
               var hasReba = data.reba_avg !== null && data.reba_avg !== undefined;
               var rulaAvg = hasRula ? Number(data.rula_avg) : NaN;
               var rebaAvg = hasReba ? Number(data.reba_avg) : NaN;
-              var sampleCount = Number(data.sample_count);
               rula.textContent = Number.isFinite(rulaAvg) ? rulaAvg.toFixed(2) : "-";
               reba.textContent = Number.isFinite(rebaAvg) ? rebaAvg.toFixed(2) : "-";
-              sampleCountEl.textContent =
-                "Based on " +
-                (Number.isFinite(sampleCount) ? String(sampleCount) : "0") +
-                " analyzed samples.";
             })
             .catch(function () {
               rula.textContent = "-";
               reba.textContent = "-";
-              sampleCountEl.textContent = "Based on 0 analyzed samples.";
             });
         }
 
         function renderClips() {
           loadDashboardClips()
             .then(function (clips) {
+              updateImprovementSummary(clips);
               if (!clips.length) {
                 clipsListEl.innerHTML = '<p class="clip-empty">No clips recorded yet.</p>';
                 return;
@@ -444,6 +591,7 @@
               clipsListEl.innerHTML = clips.slice(0, 10).map(clipItemHtml).join("");
             })
             .catch(function () {
+              updateImprovementSummary([]);
               clipsListEl.innerHTML = '<p class="clip-empty">Could not load local clips.</p>';
             });
         }
@@ -468,6 +616,10 @@
           var startMs = startMsRaw ? Number(startMsRaw) : NaN;
           var endMs = endMsRaw ? Number(endMsRaw) : NaN;
           if (!Number.isFinite(clipId)) return;
+          if (workerId && workerId !== activeWorkerId) {
+            window.alert("Blocked: clip account mismatch for this browser lock.");
+            return;
+          }
           if (!window.confirm("Delete this clip and remove its linked backend data from averages?")) return;
 
           deleteLocalClipById(clipId)
@@ -490,12 +642,34 @@
         });
 
         clearAllBtn.addEventListener("click", function () {
-          if (!window.confirm("Clear all local clips and all backend events? This cannot be undone.")) {
+          if (
+            !window.confirm(
+              "Clear all local clips for this account and their associated backend data? This cannot be undone."
+            )
+          ) {
             return;
           }
-          clearLocalClips()
+          loadDashboardClips()
+            .then(function (clips) {
+              return clips.reduce(function (p, clip) {
+                return p
+                  .then(function () {
+                    return deleteBackendEvent(Number(clip.eventId));
+                  })
+                  .then(function () {
+                    return deleteBackendSampleWindow(
+                      activeWorkerId,
+                      Number(clip.clipStartMs),
+                      Number(clip.clipEndMs)
+                    );
+                  })
+                  .then(function () {
+                    return deleteBackendSample(Number(clip.postureSampleId));
+                  });
+              }, Promise.resolve());
+            })
             .then(function () {
-              return clearBackendEvents();
+              return clearLocalClips();
             })
             .then(function () {
               renderClips();

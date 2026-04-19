@@ -55,6 +55,16 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=256)
 
 
+class SignupRequest(BaseModel):
+    email: str = Field(
+        min_length=3,
+        max_length=255,
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+    )
+    password: str = Field(min_length=8, max_length=256)
+    display_name: str = Field(min_length=1, max_length=120)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -63,3 +73,22 @@ class TokenResponse(BaseModel):
 class UserPublic(BaseModel):
     email: str
     display_name: str
+
+
+class ImprovementSummaryClip(BaseModel):
+    risk_level: RiskLevel | None = None
+    risk_descriptions: list[str] = Field(default_factory=list, max_length=8)
+    primary_risk_description: str | None = Field(default=None, max_length=400)
+    rula_score: int | None = Field(default=None, ge=1, le=7)
+    reba_score: int | None = Field(default=None, ge=1, le=15)
+    niosh_ratio: float | None = Field(default=None, ge=0.0, le=99.0)
+
+
+class ImprovementSummaryRequest(BaseModel):
+    clips: list[ImprovementSummaryClip] = Field(default_factory=list, max_length=200)
+
+
+class ImprovementSummaryResponse(BaseModel):
+    summary: str
+    source: Literal["llm", "fallback"]
+    model: str | None = None

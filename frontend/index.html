@@ -17,18 +17,20 @@
     </header>
 
     <main class="app">
-      <header class="topbar">
+      <!-- <header class="topbar">
         <h1>Live recording</h1>
         <p>Real-time ergonomic feedback (prototype)</p>
-      </header>
+      </header> -->
 
       <section class="content">
         <div class="camera-shell">
           <video class="input-video" playsinline></video>
           <canvas class="output-canvas"></canvas>
           <div id="countdown-overlay" class="countdown-overlay status-pill--hidden" aria-live="polite">
-            <div id="countdown-value" class="countdown-value">5</div>
-            <p class="countdown-text">Get in position... analysis starts soon</p>
+            <div id="countdown-value" class="countdown-value">20</div>
+            <p class="countdown-text">Click here to add 20 more seconds to the countdown.</p>
+            <p class="countdown-text">Move into your normal work stance before the countdown ends.
+            <p class="countdown-text">When countdown completes, you're all set to work on your tasks!</p>
           </div>
           <div id="status-pill" class="status-pill safe status-pill--hidden">SAFE</div>
         </div>
@@ -42,20 +44,19 @@
                 tabindex="0"
                 role="img"
                 aria-label="Setup guidance"
-                title="For stable scoring: keep your whole body in frame, set baseline once, then start your task."
+                title="For stable scoring: keep your whole body in frame, move into your normal work stance during countdown, then begin your task."
                 >?</span
               >
             </div>
             <ol class="recording-guide-list">
-              <li>Start camera and center your full body in frame (head to ankles).</li>
-              <li>Stand naturally and click <strong>Set Baseline Posture</strong> once.</li>
-              <li>Begin task movement; keep your full body visible for reliable scores.</li>
+              <li>Click <strong>Start Camera</strong> and center your full body in frame (head to ankles).</li>
+              <li>Move into your normal work stance before the countdown ends.</li>
+              <li>When countdown completes, you're all set to work on your tasks!</li>
             </ol>
           </section>
 
           <div class="controls">
             <button id="start-btn">Start Camera</button>
-            <button id="calibrate-btn">Set Baseline Posture</button>
           </div>
 
           <div class="metrics">
@@ -89,24 +90,24 @@
               <label for="freq">Lifts/min</label>
               <input id="freq" type="number" value="2" min="0" max="20" />
             </div>
+            <p class="advanced-inputs-note">Clip storage settings</p>
+            <div class="field">
+              <label for="max-clips"
+                >Max Clips Kept
+                <span
+                  class="help-icon help-icon--inline"
+                  tabindex="0"
+                  role="img"
+                  aria-label="Clip retention help"
+                  title="Only the most recent clips are kept in local browser storage."
+                  >?</span
+                ></label
+              >
+              <input id="max-clips" type="number" value="10" min="1" max="100" />
+            </div>
           </details>
 
-          <div class="field">
-            <label for="max-clips"
-              >Max Clips Kept (Last N)
-              <span
-                class="help-icon help-icon--inline"
-                tabindex="0"
-                role="img"
-                aria-label="Clip retention help"
-                title="Only the most recent N clips are kept in local browser storage."
-                >?</span
-              ></label
-            >
-            <input id="max-clips" type="number" value="10" min="1" max="100" />
-          </div>
-
-          <p id="notes" class="notes">Waiting for pose landmarks...</p>
+          <p id="notes" class="notes">Waiting for camera to start...</p>
 
           <section class="clips">
             <div class="clips-head">

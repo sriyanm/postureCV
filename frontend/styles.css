@@ -115,6 +115,11 @@ body {
   pointer-events: none;
 }
 
+.countdown-overlay--interactive {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 .countdown-value {
   font-size: clamp(3rem, 9vw, 5rem);
   font-weight: 800;
@@ -268,7 +273,6 @@ button:hover {
 /* Recording page primary controls in accent green */
 
 #start-btn,
-#calibrate-btn,
 #load-kg,
 #freq,
 #max-clips,
@@ -470,11 +474,11 @@ button:hover {
 .landing-main {
   max-width: 1040px;
   margin: 0 auto;
-  padding: 80px 24px 64px;
+  padding: 64px 24px 48px;
 }
 
 .landing-hero {
-  padding: 64px 0 96px;
+  padding: 48px 0 64px;
 }
 
 .landing-tagline {
@@ -484,7 +488,7 @@ button:hover {
 }
 
 .landing-section {
-  padding: 56px 0;
+  padding: 40px 0;
   border-top: 1px solid var(--landing-border);
 }
 
@@ -509,14 +513,14 @@ button:hover {
 .landing-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-  margin-top: 32px;
+  gap: 16px;
+  margin-top: 20px;
 }
 
 .landing-card {
   background: var(--landing-card-bg);
   border-radius: 24px;
-  padding: 24px 20px;
+  padding: 18px 16px;
   border: 1px solid var(--landing-border);
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
@@ -533,7 +537,7 @@ button:hover {
 }
 
 .landing-steps {
-  margin: 24px 0 0;
+  margin: 16px 0 0;
   padding-left: 20px;
   color: var(--landing-muted);
 }
@@ -547,7 +551,7 @@ button:hover {
 }
 
 .landing-contact-form {
-  margin-top: 28px;
+  margin-top: 20px;
   max-width: 520px;
   margin-left: auto;
   margin-right: auto;
@@ -648,7 +652,7 @@ button:hover {
 .dashboard-shell {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 32px 24px 48px;
+  padding: 24px 24px 40px;
 }
 
 .dashboard-header {
@@ -656,7 +660,7 @@ button:hover {
   justify-content: space-between;
   align-items: flex-start;
   gap: 24px;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
 }
 
 .dashboard-header-actions {
@@ -726,20 +730,20 @@ button:hover {
 .dashboard-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-  margin-bottom: 40px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .metric-card {
   background: var(--landing-card-bg);
   border-radius: 28px;
-  padding: 28px 24px;
+  padding: 20px;
   border: 1px solid var(--landing-border);
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
 .metric-card h2 {
-  margin: 0 0 16px;
+  margin: 0 0 10px;
   font-size: 0.95rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -747,8 +751,8 @@ button:hover {
 }
 
 .metric-card-value {
-  font-size: 3rem;
-  margin-bottom: 8px;
+  font-size: 2.5rem;
+  margin-bottom: 4px;
 }
 
 .metric-card p {
@@ -760,7 +764,7 @@ button:hover {
 .dashboard-main-grid {
   display: grid;
   grid-template-columns: 3fr 2fr;
-  gap: 32px;
+  gap: 20px;
   align-items: flex-start;
 }
 
@@ -770,7 +774,7 @@ button:hover {
 }
 
 .dashboard-section p {
-  margin: 0 0 16px;
+  margin: 0 0 10px;
   color: var(--landing-muted);
   font-size: 0.95rem;
 }
