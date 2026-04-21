@@ -540,8 +540,13 @@
           });
         }
 
-        function clearBackendEvents() {
-          return fetch(base + "/api/events", {
+        function clearBackendEvents(workerId) {
+          var worker = String(workerId || "").trim();
+          if (!worker) return Promise.resolve();
+          var qs = new URLSearchParams({
+            worker_id: worker
+          });
+          return fetch(base + "/api/events?" + qs.toString(), {
             method: "DELETE",
             headers: auth.authHeaders()
           }).then(function (res) {
@@ -649,25 +654,7 @@
           ) {
             return;
           }
-          loadDashboardClips()
-            .then(function (clips) {
-              return clips.reduce(function (p, clip) {
-                return p
-                  .then(function () {
-                    return deleteBackendEvent(Number(clip.eventId));
-                  })
-                  .then(function () {
-                    return deleteBackendSampleWindow(
-                      activeWorkerId,
-                      Number(clip.clipStartMs),
-                      Number(clip.clipEndMs)
-                    );
-                  })
-                  .then(function () {
-                    return deleteBackendSample(Number(clip.postureSampleId));
-                  });
-              }, Promise.resolve());
-            })
+          clearBackendEvents(activeWorkerId)
             .then(function () {
               return clearLocalClips();
             })

@@ -246,10 +246,22 @@ def clear_risk_events() -> int:
         return int(cursor.rowcount)
 
 
+def clear_risk_events_for_worker(worker_id: str) -> int:
+    with get_connection() as conn:
+        cursor = conn.execute("DELETE FROM risk_events WHERE worker_id = ?;", (worker_id,))
+        return int(cursor.rowcount)
+
+
 def clear_posture_samples() -> int:
     with get_connection() as conn:
         cursor = conn.execute("DELETE FROM posture_samples;")
         conn.execute("DELETE FROM sqlite_sequence WHERE name = 'posture_samples';")
+        return int(cursor.rowcount)
+
+
+def clear_posture_samples_for_worker(worker_id: str) -> int:
+    with get_connection() as conn:
+        cursor = conn.execute("DELETE FROM posture_samples WHERE worker_id = ?;", (worker_id,))
         return int(cursor.rowcount)
 
 

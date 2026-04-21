@@ -21,7 +21,9 @@ from app.schemas import (
 from app.storage import (
     UserAlreadyExistsError,
     clear_posture_samples,
+    clear_posture_samples_for_worker,
     clear_risk_events,
+    clear_risk_events_for_worker,
     create_user,
     delete_posture_sample,
     delete_posture_samples_in_window,
@@ -259,10 +261,19 @@ def delete_event(
 
 
 @app.delete("/api/events")
-def clear_events(_: UserPublic = Depends(get_current_user)) -> dict[str, object]:
-    deleted_event_count = clear_risk_events()
-    deleted_sample_count = clear_posture_samples()
+def clear_events(
+    worker_id: str | None = Query(default=None, min_length=1, max_length=128),
+    _: UserPublic = Depends(get_current_user),
+) -> dict[str, object]:
+    normalized_worker_id = worker_id.strip() if worker_id else ""
+    if normalized_worker_id:
+        deleted_event_count = clear_risk_events_for_worker(normalized_worker_id)
+        deleted_sample_count = clear_posture_samples_for_worker(normalized_worker_id)
+    else:
+        deleted_event_count = clear_risk_events()
+        deleted_sample_count = clear_posture_samples()
     return {
+        "worker_id": normalized_worker_id or None,
         "deleted_risk_event_count": deleted_event_count,
         "deleted_posture_sample_count": deleted_sample_count,
     }
